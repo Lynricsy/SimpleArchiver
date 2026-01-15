@@ -23,7 +23,7 @@ import (
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.2.0"
+	AppVersion = "1.3.0"
 )
 
 // 操作模式
@@ -172,6 +172,14 @@ type model struct {
 	spinner           spinner.Model
 	compressStats     archiver.CompressStats
 	extractStats      archiver.ExtractStats
+
+	// 速度统计
+	speedHistory      []float64  // 速度历史记录
+	lastBytes         int64      // 上次记录的字节数
+	lastTime          time.Time  // 上次记录时间
+	currentSpeed      float64    // 当前速度 (bytes/s)
+	avgSpeed          float64    // 平均速度
+	startTime         time.Time  // 开始时间
 	errorMsg          string
 
 	operationCtx      context.Context
@@ -392,7 +400,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		if m.state == stateCompressing || m.state == stateExtracting {
-			cmds = append(cmds, tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+			// 计算速度
+			m.updateSpeed()
+			cmds = append(cmds, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 				return tickMsg(t)
 			}))
 		}
@@ -664,11 +674,19 @@ func (m model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "y", "enter":
+		// 初始化速度统计
+		m.speedHistory = make([]float64, 0, 30)
+		m.lastBytes = 0
+		m.lastTime = time.Now()
+		m.startTime = time.Now()
+		m.currentSpeed = 0
+		m.avgSpeed = 0
+
 		if m.mode == modeExtract {
 			m.state = stateExtracting
 			return m, tea.Batch(
 				m.startExtract(),
-				tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+				tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 					return tickMsg(t)
 				}),
 			)
@@ -676,7 +694,7 @@ func (m model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.state = stateCompressing
 			return m, tea.Batch(
 				m.startCompress(),
-				tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+				tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 					return tickMsg(t)
 				}),
 			)
@@ -738,6 +756,105 @@ func (m *model) startExtract() tea.Cmd {
 
 		return extractDoneMsg{stats: stats, err: nil}
 	}
+}
+
+// updateSpeed 更新速度统计
+func (m *model) updateSpeed() {
+	now := time.Now()
+	elapsed := now.Sub(m.lastTime).Seconds()
+	if elapsed < 0.1 {
+		return // 避免除以太小的数
+	}
+
+	var currentBytes int64
+	if m.state == stateCompressing {
+		currentBytes = m.compressStats.CompressedSize
+	} else {
+		currentBytes = m.extractStats.ExtractedSize
+	}
+
+	// 计算当前速度
+	bytesDiff := currentBytes - m.lastBytes
+	if bytesDiff >= 0 {
+		m.currentSpeed = float64(bytesDiff) / elapsed
+	}
+
+	// 更新历史记录
+	m.speedHistory = append(m.speedHistory, m.currentSpeed)
+	if len(m.speedHistory) > 30 {
+		m.speedHistory = m.speedHistory[1:]
+	}
+
+	// 计算平均速度
+	totalElapsed := now.Sub(m.startTime).Seconds()
+	if totalElapsed > 0 {
+		m.avgSpeed = float64(currentBytes) / totalElapsed
+	}
+
+	m.lastBytes = currentBytes
+	m.lastTime = now
+}
+
+// renderSparkline 渲染速度图表
+func (m model) renderSparkline() string {
+	if len(m.speedHistory) == 0 {
+		return ""
+	}
+
+	// Unicode sparkline 字符
+	sparkChars := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+	// 找到最大值用于归一化
+	var maxSpeed float64
+	for _, s := range m.speedHistory {
+		if s > maxSpeed {
+			maxSpeed = s
+		}
+	}
+
+	if maxSpeed == 0 {
+		return strings.Repeat(string(sparkChars[0]), len(m.speedHistory))
+	}
+
+	var sb strings.Builder
+	for _, s := range m.speedHistory {
+		idx := int((s / maxSpeed) * float64(len(sparkChars)-1))
+		if idx >= len(sparkChars) {
+			idx = len(sparkChars) - 1
+		}
+		if idx < 0 {
+			idx = 0
+		}
+		sb.WriteRune(sparkChars[idx])
+	}
+
+	return sb.String()
+}
+
+// formatSpeed 格式化速度显示
+func formatSpeed(bytesPerSec float64) string {
+	if bytesPerSec < 1024 {
+		return fmt.Sprintf("%.0f B/s", bytesPerSec)
+	} else if bytesPerSec < 1024*1024 {
+		return fmt.Sprintf("%.1f KB/s", bytesPerSec/1024)
+	} else if bytesPerSec < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB/s", bytesPerSec/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GB/s", bytesPerSec/(1024*1024*1024))
+}
+
+// formatDuration 格式化时间显示
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	} else if d < time.Hour {
+		mins := int(d.Minutes())
+		secs := int(d.Seconds()) % 60
+		return fmt.Sprintf("%dm %ds", mins, secs)
+	}
+	hours := int(d.Hours())
+	mins := int(d.Minutes()) % 60
+	return fmt.Sprintf("%dh %dm", hours, mins)
 }
 
 // View 渲染视图
@@ -1189,6 +1306,24 @@ func (m model) viewCompressing() string {
 	sb.WriteString(m.progress.ViewAs(percent))
 	sb.WriteString("\n\n")
 
+	// 速度图表
+	sparkline := m.renderSparkline()
+	if sparkline != "" {
+		speedColor := lipgloss.Color("#00D4FF")
+		sparkStyle := lipgloss.NewStyle().Foreground(speedColor)
+		sb.WriteString(statLabelStyle.Render("速度:"))
+		sb.WriteString(sparkStyle.Render(sparkline))
+		sb.WriteString("\n")
+		
+		// 当前速度和平均速度
+		sb.WriteString(statLabelStyle.Render("当前:"))
+		sb.WriteString(infoStyle.Render(formatSpeed(m.currentSpeed)))
+		sb.WriteString("  ")
+		sb.WriteString(statLabelStyle.Render("平均:"))
+		sb.WriteString(infoStyle.Render(formatSpeed(m.avgSpeed)))
+		sb.WriteString("\n")
+	}
+
 	// 统计信息
 	sb.WriteString(statLabelStyle.Render("处理进度:"))
 	sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d / %d 文件", m.compressStats.ProcessedFiles, m.compressStats.TotalFiles)))
@@ -1197,6 +1332,14 @@ func (m model) viewCompressing() string {
 	if m.compressStats.ExcludedFiles > 0 {
 		sb.WriteString(statLabelStyle.Render("已排除:"))
 		sb.WriteString(warningStyle.Render(fmt.Sprintf("%d 个文件/目录", m.compressStats.ExcludedFiles)))
+		sb.WriteString("\n")
+	}
+
+	// 已用时间
+	if !m.startTime.IsZero() {
+		elapsed := time.Since(m.startTime)
+		sb.WriteString(statLabelStyle.Render("已用时间:"))
+		sb.WriteString(statValueStyle.Render(formatDuration(elapsed)))
 		sb.WriteString("\n")
 	}
 
@@ -1236,6 +1379,24 @@ func (m model) viewExtracting() string {
 	sb.WriteString(m.progress.ViewAs(percent))
 	sb.WriteString("\n\n")
 
+	// 速度图表
+	sparkline := m.renderSparkline()
+	if sparkline != "" {
+		speedColor := lipgloss.Color("#00D4FF")
+		sparkStyle := lipgloss.NewStyle().Foreground(speedColor)
+		sb.WriteString(statLabelStyle.Render("速度:"))
+		sb.WriteString(sparkStyle.Render(sparkline))
+		sb.WriteString("\n")
+		
+		// 当前速度和平均速度
+		sb.WriteString(statLabelStyle.Render("当前:"))
+		sb.WriteString(infoStyle.Render(formatSpeed(m.currentSpeed)))
+		sb.WriteString("  ")
+		sb.WriteString(statLabelStyle.Render("平均:"))
+		sb.WriteString(infoStyle.Render(formatSpeed(m.avgSpeed)))
+		sb.WriteString("\n")
+	}
+
 	// 统计信息
 	sb.WriteString(statLabelStyle.Render("处理进度:"))
 	if m.extractStats.TotalFiles > 0 {
@@ -1244,6 +1405,14 @@ func (m model) viewExtracting() string {
 		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d 文件", m.extractStats.ProcessedFiles)))
 	}
 	sb.WriteString("\n")
+
+	// 已用时间
+	if !m.startTime.IsZero() {
+		elapsed := time.Since(m.startTime)
+		sb.WriteString(statLabelStyle.Render("已用时间:"))
+		sb.WriteString(statValueStyle.Render(formatDuration(elapsed)))
+		sb.WriteString("\n")
+	}
 
 	sb.WriteString(helpStyle.Render("\nCtrl+C 取消"))
 
