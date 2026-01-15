@@ -24,7 +24,7 @@ import (
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.6.0"
+	AppVersion = "1.6.2"
 )
 
 // 操作模式
@@ -204,6 +204,9 @@ type model struct {
 
 	operationCtx      context.Context
 	operationCancel   context.CancelFunc
+
+	// 进度通道（用于后台任务与 UI 之间的通信）
+	progressChan      chan interface{}
 }
 
 // CompressProgressMsg 压缩进度消息
@@ -236,6 +239,22 @@ type extractDoneMsg struct {
 
 // tickMsg 定时器消息
 type tickMsg time.Time
+
+// progressChanMsg 进度通道消息（用于从通道接收进度更新）
+type progressChanMsg struct {
+	msg interface{}
+}
+
+// listenProgressChan 监听进度通道
+func listenProgressChan(ch chan interface{}) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return nil // 通道已关闭
+		}
+		return progressChanMsg{msg: msg}
+	}
+}
 
 // newModel 创建新的应用模型
 func newModel() model {
@@ -395,6 +414,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.progress.SetPercent(percent))
 		}
 		m.extractStats = msg.stats
+
+	case progressChanMsg:
+		// 处理从进度通道接收到的消息
+		if msg.msg != nil {
+			switch v := msg.msg.(type) {
+			case compressProgressMsg:
+				if v.total > 0 {
+					percent := float64(v.current) / float64(v.total)
+					cmds = append(cmds, m.progress.SetPercent(percent))
+				}
+				m.compressStats = v.stats
+			case extractProgressMsg:
+				if v.total > 0 {
+					percent := float64(v.current) / float64(v.total)
+					cmds = append(cmds, m.progress.SetPercent(percent))
+				}
+				m.extractStats = v.stats
+			}
+			// 继续监听通道
+			if m.progressChan != nil && (m.state == stateCompressing || m.state == stateExtracting) {
+				cmds = append(cmds, listenProgressChan(m.progressChan))
+			}
+		}
 
 	case compressDoneMsg:
 		if msg.err != nil {
@@ -734,18 +776,25 @@ func (m model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // startCompress 开始压缩
 func (m *model) startCompress() tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-		m.operationCtx = ctx
-		m.operationCancel = cancel
+	// 创建进度通道
+	m.progressChan = make(chan interface{}, 100)
+	progressChan := m.progressChan
 
-		// 收集排除模式
-		var excludes []string
-		for _, cat := range m.excludeCategories {
-			if cat.Selected {
-				excludes = append(excludes, cat.Patterns...)
-			}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.operationCtx = ctx
+	m.operationCancel = cancel
+
+	// 收集排除模式
+	var excludes []string
+	for _, cat := range m.excludeCategories {
+		if cat.Selected {
+			excludes = append(excludes, cat.Patterns...)
 		}
+	}
+
+	// 压缩任务
+	compressCmd := func() tea.Msg {
+		defer close(progressChan)
 
 		opts := archiver.CompressOptions{
 			Source:   m.selectedPath,
@@ -753,6 +802,34 @@ func (m *model) startCompress() tea.Cmd {
 			Format:   m.selectedFormat.Extension,
 			Excludes: excludes,
 			Password: m.password,
+			OnProgress: func(current, total int, currentFile string) {
+				// 发送进度到通道（非阻塞）
+				select {
+				case progressChan <- compressProgressMsg{
+					current:     current,
+					total:       total,
+					currentFile: currentFile,
+					stats: archiver.CompressStats{
+						TotalFiles:     total,
+						ProcessedFiles: current,
+						CurrentFile:    currentFile,
+					},
+				}:
+				default:
+				}
+			},
+			OnStats: func(stats archiver.CompressStats) {
+				// 发送统计信息到通道（非阻塞）
+				select {
+				case progressChan <- compressProgressMsg{
+					current:     stats.ProcessedFiles,
+					total:       stats.TotalFiles,
+					currentFile: stats.CurrentFile,
+					stats:       stats,
+				}:
+				default:
+				}
+			},
 		}
 
 		stats, err := archiver.Compress(ctx, opts)
@@ -762,19 +839,60 @@ func (m *model) startCompress() tea.Cmd {
 
 		return compressDoneMsg{stats: stats, err: nil}
 	}
+
+	// 返回批量命令：开始压缩 + 监听进度通道
+	return tea.Batch(
+		compressCmd,
+		listenProgressChan(progressChan),
+	)
 }
 
 // startExtract 开始解压
 func (m *model) startExtract() tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-		m.operationCtx = ctx
-		m.operationCancel = cancel
+	// 创建进度通道
+	m.progressChan = make(chan interface{}, 100)
+	progressChan := m.progressChan
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.operationCtx = ctx
+	m.operationCancel = cancel
+
+	// 解压任务
+	extractCmd := func() tea.Msg {
+		defer close(progressChan)
 
 		opts := archiver.ExtractOptions{
 			Source:   m.selectedPath,
 			Output:   m.outputPath,
 			Password: m.password,
+			OnProgress: func(current, total int, currentFile string) {
+				// 发送进度到通道（非阻塞）
+				select {
+				case progressChan <- extractProgressMsg{
+					current:     current,
+					total:       total,
+					currentFile: currentFile,
+					stats: archiver.ExtractStats{
+						TotalFiles:     total,
+						ProcessedFiles: current,
+						CurrentFile:    currentFile,
+					},
+				}:
+				default:
+				}
+			},
+			OnStats: func(stats archiver.ExtractStats) {
+				// 发送统计信息到通道（非阻塞）
+				select {
+				case progressChan <- extractProgressMsg{
+					current:     stats.ProcessedFiles,
+					total:       stats.TotalFiles,
+					currentFile: stats.CurrentFile,
+					stats:       stats,
+				}:
+				default:
+				}
+			},
 		}
 
 		stats, err := archiver.Extract(ctx, opts)
@@ -784,6 +902,12 @@ func (m *model) startExtract() tea.Cmd {
 
 		return extractDoneMsg{stats: stats, err: nil}
 	}
+
+	// 返回批量命令：开始解压 + 监听进度通道
+	return tea.Batch(
+		extractCmd,
+		listenProgressChan(progressChan),
+	)
 }
 
 // updateSpeed 更新速度统计
