@@ -49,10 +49,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Lynricsy/SimpleArchiver/main
 
 ```bash
 # 全局安装
-npm install -g simple-archiver
+npm install -g simple-archiver-tui
 
 # 或使用 npx 直接运行
-npx simple-archiver
+npx simple-archiver-tui
 ```
 
 ### 使用 Go Install
