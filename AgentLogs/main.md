@@ -67,5 +67,21 @@ SimpleArchiver/
 
 **版本:** 1.1.0
 
+### 2026-01-16 - 添加7z和密码支持
+
+✅ 完成7z解压和密码保护功能：
+
+**新增功能:**
+- 7z格式解压支持（使用 bodgit/sevenzip 库）
+- ZIP密码保护压缩（AES-256加密，使用 yeka/zip 库）
+- 密码设置界面（压缩ZIP时可选择是否加密）
+- 加密ZIP解压支持
+
+**依赖新增:**
+- `github.com/bodgit/sevenzip` - 7z解压
+- `github.com/yeka/zip` - 加密ZIP
+
+**版本:** 1.2.0
+
 ---
 

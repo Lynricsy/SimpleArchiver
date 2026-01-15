@@ -23,7 +23,7 @@ import (
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.1.0"
+	AppVersion = "1.2.0"
 )
 
 // 操作模式
@@ -127,6 +127,7 @@ const (
 	stateSelectFile
 	stateSelectFormat
 	stateSelectExcludes
+	stateInputPassword
 	stateConfirm
 	stateCompressing
 	stateExtracting
@@ -162,6 +163,10 @@ type model struct {
 	selectedPath      string
 	selectedFormat    config.ArchiveFormat
 	outputPath        string
+	password          string
+	passwordInput     string
+	usePassword       bool
+	passwordCursor    int // 0: 不使用密码, 1: 使用密码
 
 	progress          progress.Model
 	spinner           spinner.Model
@@ -329,6 +334,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSelectFormat(msg)
 		case stateSelectExcludes:
 			return m.updateSelectExcludes(msg)
+		case stateInputPassword:
+			return m.updateInputPassword(msg)
 		case stateConfirm:
 			return m.updateConfirm(msg)
 		case stateDone, stateError:
@@ -538,7 +545,63 @@ func (m model) updateSelectExcludes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "enter":
-		m.state = stateConfirm
+		// 如果是ZIP格式，询问是否加密
+		if m.selectedFormat.Extension == ".zip" {
+			m.state = stateInputPassword
+			m.passwordCursor = 0
+		} else {
+			m.state = stateConfirm
+		}
+	}
+
+	return m, nil
+}
+
+// updateInputPassword 更新密码输入状态
+func (m model) updateInputPassword(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "esc":
+		m.state = stateSelectExcludes
+		m.passwordInput = ""
+		m.usePassword = false
+
+	case "up", "k":
+		if m.passwordCursor > 0 {
+			m.passwordCursor--
+		}
+
+	case "down", "j":
+		if m.passwordCursor < 1 {
+			m.passwordCursor++
+		}
+
+	case "enter":
+		if m.passwordCursor == 0 {
+			// 不使用密码
+			m.usePassword = false
+			m.password = ""
+			m.state = stateConfirm
+		} else {
+			// 使用密码 - 如果还没输入密码，等待输入
+			if m.passwordInput == "" {
+				// 密码输入提示已显示，等待输入
+				return m, nil
+			}
+			m.usePassword = true
+			m.password = m.passwordInput
+			m.state = stateConfirm
+		}
+
+	case "backspace":
+		if m.passwordCursor == 1 && len(m.passwordInput) > 0 {
+			m.passwordInput = m.passwordInput[:len(m.passwordInput)-1]
+		}
+
+	default:
+		// 如果选择了使用密码，记录输入
+		if m.passwordCursor == 1 && len(msg.String()) == 1 {
+			m.passwordInput += msg.String()
+		}
 	}
 
 	return m, nil
@@ -550,6 +613,8 @@ func (m model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "esc", "n":
 		if m.mode == modeExtract {
 			m.state = stateSelectFile
+		} else if m.selectedFormat.Extension == ".zip" {
+			m.state = stateInputPassword
 		} else {
 			m.state = stateSelectExcludes
 		}
@@ -597,6 +662,7 @@ func (m *model) startCompress() tea.Cmd {
 			Output:   m.outputPath,
 			Format:   m.selectedFormat.Extension,
 			Excludes: excludes,
+			Password: m.password,
 		}
 
 		stats, err := archiver.Compress(ctx, opts)
@@ -657,6 +723,8 @@ func (m model) View() string {
 		sb.WriteString(m.viewSelectFormat())
 	case stateSelectExcludes:
 		sb.WriteString(m.viewSelectExcludes())
+	case stateInputPassword:
+		sb.WriteString(m.viewInputPassword())
 	case stateConfirm:
 		sb.WriteString(m.viewConfirm())
 	case stateCompressing:
@@ -885,6 +953,61 @@ func (m model) viewSelectExcludes() string {
 	return borderStyle.Render(sb.String())
 }
 
+// viewInputPassword 渲染密码输入视图
+func (m model) viewInputPassword() string {
+	var sb strings.Builder
+
+	sb.WriteString(titleStyle.Render("🔐 密码保护设置"))
+	sb.WriteString("\n")
+	sb.WriteString(subtitleStyle.Render("ZIP格式支持 AES-256 加密保护"))
+	sb.WriteString("\n\n")
+
+	options := []struct {
+		icon string
+		name string
+		desc string
+	}{
+		{"🔓", "不使用密码", "生成普通ZIP文件"},
+		{"🔒", "设置密码", "使用 AES-256 加密"},
+	}
+
+	for i, opt := range options {
+		cursor := "  "
+		if i == m.passwordCursor {
+			cursor = "▸ "
+		}
+
+		icon := opt.icon
+		var name string
+		if i == m.passwordCursor {
+			name = selectedStyle.Render(opt.name)
+		} else {
+			name = normalStyle.Render(opt.name)
+		}
+
+		desc := subtitleStyle.Render(" - " + opt.desc)
+		sb.WriteString(fmt.Sprintf("%s%s %s%s\n", cursor, icon, name, desc))
+	}
+
+	// 如果选择了使用密码，显示密码输入框
+	if m.passwordCursor == 1 {
+		sb.WriteString("\n")
+		sb.WriteString(statLabelStyle.Render("输入密码:"))
+		passwordDisplay := strings.Repeat("●", len(m.passwordInput))
+		if passwordDisplay == "" {
+			passwordDisplay = lipgloss.NewStyle().Foreground(mutedColor).Render("(输入密码后按Enter确认)")
+		} else {
+			passwordDisplay = infoStyle.Render(passwordDisplay)
+		}
+		sb.WriteString(passwordDisplay)
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(helpStyle.Render("\n↑/k 上移 | ↓/j 下移 | Enter 确认 | Esc 返回"))
+
+	return borderStyle.Render(sb.String())
+}
+
 // viewConfirm 渲染确认视图
 func (m model) viewConfirm() string {
 	var sb strings.Builder
@@ -916,6 +1039,17 @@ func (m model) viewConfirm() string {
 		sb.WriteString(statLabelStyle.Render("压缩格式:"))
 		sb.WriteString(infoStyle.Render(m.selectedFormat.Name))
 		sb.WriteString("\n")
+
+		// 密码保护
+		if m.selectedFormat.Extension == ".zip" {
+			sb.WriteString(statLabelStyle.Render("密码保护:"))
+			if m.usePassword {
+				sb.WriteString(successStyle.Render("🔒 AES-256 加密"))
+			} else {
+				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("🔓 无"))
+			}
+			sb.WriteString("\n")
+		}
 
 		// 排除规则数量
 		excludeCount := 0

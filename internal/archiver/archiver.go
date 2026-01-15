@@ -13,11 +13,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bodgit/sevenzip"
 	"github.com/dsnet/compress/bzip2"
 	"github.com/klauspost/compress/zstd"
 	"github.com/klauspost/pgzip"
 	"github.com/pierrec/lz4/v4"
 	"github.com/ulikunitz/xz"
+	yekazip "github.com/yeka/zip"
 )
 
 // ProgressCallback 进度回调函数类型
@@ -40,6 +42,7 @@ type CompressOptions struct {
 	Output     string
 	Format     string
 	Excludes   []string
+	Password   string // 密码保护（仅支持ZIP）
 	OnProgress ProgressCallback
 	OnStats    func(stats CompressStats)
 }
@@ -185,6 +188,11 @@ func compressZip(ctx context.Context, files []string, opts CompressOptions, stat
 	}
 	defer outFile.Close()
 
+	// 根据是否有密码选择不同的实现
+	if opts.Password != "" {
+		return compressZipWithPassword(ctx, outFile, files, opts, stats)
+	}
+
 	zipWriter := zip.NewWriter(outFile)
 	defer zipWriter.Close()
 
@@ -242,6 +250,77 @@ func addFileToZip(zw *zip.Writer, filePath, archivePath string) error {
 
 	header.Name = archivePath
 	header.Method = zip.Deflate
+
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, file)
+	return err
+}
+
+// compressZipWithPassword 使用密码保护压缩 ZIP 文件
+func compressZipWithPassword(ctx context.Context, outFile *os.File, files []string, opts CompressOptions, stats *CompressStats) error {
+	zipWriter := yekazip.NewWriter(outFile)
+	defer zipWriter.Close()
+
+	baseDir := filepath.Dir(opts.Source)
+
+	for i, file := range files {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		relPath, err := filepath.Rel(baseDir, file)
+		if err != nil {
+			relPath = filepath.Base(file)
+		}
+
+		// 更新进度
+		stats.ProcessedFiles = i + 1
+		stats.CurrentFile = relPath
+		if opts.OnProgress != nil {
+			opts.OnProgress(i+1, len(files), relPath)
+		}
+		if opts.OnStats != nil {
+			opts.OnStats(*stats)
+		}
+
+		// 添加加密文件到 zip
+		err = addEncryptedFileToZip(zipWriter, file, relPath, opts.Password)
+		if err != nil {
+			return fmt.Errorf("添加加密文件失败 %s: %w", relPath, err)
+		}
+	}
+
+	return nil
+}
+
+// addEncryptedFileToZip 添加加密文件到 zip 归档
+func addEncryptedFileToZip(zw *yekazip.Writer, filePath, archivePath, password string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := yekazip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+
+	header.Name = archivePath
+	header.Method = yekazip.Deflate
+	header.SetPassword(password)
+	header.SetEncryptionMethod(yekazip.AES256Encryption)
 
 	writer, err := zw.CreateHeader(header)
 	if err != nil {
@@ -412,6 +491,7 @@ type ExtractStats struct {
 type ExtractOptions struct {
 	Source     string
 	Output     string
+	Password   string // 密码（用于加密归档）
 	OnProgress ProgressCallback
 	OnStats    func(stats ExtractStats)
 }
@@ -422,6 +502,8 @@ func DetectArchiveFormat(filename string) string {
 	switch {
 	case strings.HasSuffix(lower, ".zip"):
 		return ".zip"
+	case strings.HasSuffix(lower, ".7z"):
+		return ".7z"
 	case strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz"):
 		return ".tar.gz"
 	case strings.HasSuffix(lower, ".tar.bz2") || strings.HasSuffix(lower, ".tbz2"):
@@ -470,6 +552,8 @@ func Extract(ctx context.Context, opts ExtractOptions) (*ExtractStats, error) {
 	switch format {
 	case ".zip":
 		err = extractZip(ctx, opts, stats)
+	case ".7z":
+		err = extract7z(ctx, opts, stats)
 	case ".tar.gz":
 		err = extractTarGz(ctx, opts, stats)
 	case ".tar.bz2":
@@ -495,6 +579,11 @@ func Extract(ctx context.Context, opts ExtractOptions) (*ExtractStats, error) {
 
 // extractZip 解压 ZIP 文件
 func extractZip(ctx context.Context, opts ExtractOptions, stats *ExtractStats) error {
+	// 如果有密码，使用支持密码的库
+	if opts.Password != "" {
+		return extractZipWithPassword(ctx, opts, stats)
+	}
+
 	reader, err := zip.OpenReader(opts.Source)
 	if err != nil {
 		return fmt.Errorf("打开 ZIP 文件失败: %w", err)
@@ -551,6 +640,83 @@ func extractZip(ctx context.Context, opts ExtractOptions, stats *ExtractStats) e
 	return nil
 }
 
+// extractZipWithPassword 解压密码保护的 ZIP 文件
+func extractZipWithPassword(ctx context.Context, opts ExtractOptions, stats *ExtractStats) error {
+	reader, err := yekazip.OpenReader(opts.Source)
+	if err != nil {
+		return fmt.Errorf("打开加密 ZIP 文件失败: %w", err)
+	}
+	defer reader.Close()
+
+	stats.TotalFiles = len(reader.File)
+
+	for i, file := range reader.File {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// 设置密码
+		if file.IsEncrypted() {
+			file.SetPassword(opts.Password)
+		}
+
+		// 更新进度
+		stats.ProcessedFiles = i + 1
+		stats.CurrentFile = file.Name
+		if opts.OnProgress != nil {
+			opts.OnProgress(i+1, len(reader.File), file.Name)
+		}
+		if opts.OnStats != nil {
+			opts.OnStats(*stats)
+		}
+
+		// 构建目标路径
+		targetPath := filepath.Join(opts.Output, file.Name)
+
+		// 安全检查
+		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(opts.Output)) {
+			return fmt.Errorf("非法的文件路径: %s", file.Name)
+		}
+
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(targetPath, file.Mode()); err != nil {
+				return fmt.Errorf("创建目录失败 %s: %w", file.Name, err)
+			}
+			continue
+		}
+
+		// 确保父目录存在
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return fmt.Errorf("创建父目录失败: %w", err)
+		}
+
+		// 解压文件
+		rc, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("打开加密文件失败 %s: %w", file.Name, err)
+		}
+
+		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("创建文件失败 %s: %w", file.Name, err)
+		}
+
+		written, err := io.Copy(outFile, rc)
+		outFile.Close()
+		rc.Close()
+		if err != nil {
+			return fmt.Errorf("解压文件失败 %s: %w", file.Name, err)
+		}
+
+		stats.ExtractedSize += written
+	}
+
+	return nil
+}
+
 // extractZipFile 解压单个 ZIP 文件
 func extractZipFile(file *zip.File, targetPath string) error {
 	reader, err := file.Open()
@@ -567,6 +733,86 @@ func extractZipFile(file *zip.File, targetPath string) error {
 
 	_, err = io.Copy(writer, reader)
 	return err
+}
+
+// extract7z 解压 7z 文件
+func extract7z(ctx context.Context, opts ExtractOptions, stats *ExtractStats) error {
+	var reader *sevenzip.ReadCloser
+	var err error
+
+	// 如果有密码，使用密码打开
+	if opts.Password != "" {
+		reader, err = sevenzip.OpenReaderWithPassword(opts.Source, opts.Password)
+	} else {
+		reader, err = sevenzip.OpenReader(opts.Source)
+	}
+	if err != nil {
+		return fmt.Errorf("打开 7z 文件失败: %w", err)
+	}
+	defer reader.Close()
+
+	stats.TotalFiles = len(reader.File)
+
+	for i, file := range reader.File {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// 更新进度
+		stats.ProcessedFiles = i + 1
+		stats.CurrentFile = file.Name
+		if opts.OnProgress != nil {
+			opts.OnProgress(i+1, len(reader.File), file.Name)
+		}
+		if opts.OnStats != nil {
+			opts.OnStats(*stats)
+		}
+
+		// 构建目标路径
+		targetPath := filepath.Join(opts.Output, file.Name)
+
+		// 安全检查
+		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(opts.Output)) {
+			return fmt.Errorf("非法的文件路径: %s", file.Name)
+		}
+
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(targetPath, 0755); err != nil {
+				return fmt.Errorf("创建目录失败 %s: %w", file.Name, err)
+			}
+			continue
+		}
+
+		// 确保父目录存在
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return fmt.Errorf("创建父目录失败: %w", err)
+		}
+
+		// 解压文件
+		rc, err := file.Open()
+		if err != nil {
+			return fmt.Errorf("打开 7z 文件条目失败 %s: %w", file.Name, err)
+		}
+
+		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("创建文件失败 %s: %w", file.Name, err)
+		}
+
+		written, err := io.Copy(outFile, rc)
+		outFile.Close()
+		rc.Close()
+		if err != nil {
+			return fmt.Errorf("写入文件失败 %s: %w", file.Name, err)
+		}
+
+		stats.ExtractedSize += written
+	}
+
+	return nil
 }
 
 // extractTarGz 解压 TAR.GZ 文件
