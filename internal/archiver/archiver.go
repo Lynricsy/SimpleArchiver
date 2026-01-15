@@ -10,7 +10,9 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/bodgit/sevenzip"
@@ -45,6 +47,33 @@ type CompressOptions struct {
 	Password   string // 密码保护（仅支持ZIP）
 	OnProgress ProgressCallback
 	OnStats    func(stats CompressStats)
+}
+
+// Get7zCommand 获取系统上可用的 7z 命令
+// 返回命令路径和是否可用
+func Get7zCommand() (string, bool) {
+	// 按优先级检查不同的 7z 命令
+	commands := []string{"7z", "7za", "7zz"}
+
+	// Windows 上也检查 .exe 后缀
+	if runtime.GOOS == "windows" {
+		commands = append([]string{"7z.exe", "7za.exe", "7zz.exe"}, commands...)
+	}
+
+	for _, cmd := range commands {
+		path, err := exec.LookPath(cmd)
+		if err == nil {
+			return path, true
+		}
+	}
+
+	return "", false
+}
+
+// Is7zAvailable 检查 7z 命令是否可用
+func Is7zAvailable() bool {
+	_, available := Get7zCommand()
+	return available
 }
 
 // shouldExclude 检查文件是否应该被排除
@@ -150,6 +179,8 @@ func Compress(ctx context.Context, opts CompressOptions) (*CompressStats, error)
 	switch opts.Format {
 	case ".zip":
 		err = compressZip(ctx, files, opts, stats)
+	case ".7z":
+		err = compress7z(ctx, files, opts, stats)
 	case ".tar.gz":
 		err = compressTarGz(ctx, files, opts, stats)
 	case ".tar.bz2":
@@ -178,6 +209,55 @@ func Compress(ctx context.Context, opts CompressOptions) (*CompressStats, error)
 	}
 
 	return stats, nil
+}
+
+// compress7z 使用 7z 命令压缩
+func compress7z(ctx context.Context, files []string, opts CompressOptions, stats *CompressStats) error {
+	// 检查 7z 命令是否可用
+	cmd7z, available := Get7zCommand()
+	if !available {
+		return fmt.Errorf("7z command not found. Please install p7zip:\n  - Ubuntu/Debian: sudo apt install p7zip-full\n  - macOS: brew install p7zip\n  - Windows: Download from https://www.7-zip.org/")
+	}
+
+	// 构建 7z 命令参数
+	args := []string{"a", "-mx=9"} // a = add, mx=9 = maximum compression
+
+	// 如果有密码，添加密码参数
+	if opts.Password != "" {
+		args = append(args, "-p"+opts.Password)
+		args = append(args, "-mhe=on") // 加密文件头
+	}
+
+	// 添加输出文件
+	args = append(args, opts.Output)
+
+	// 添加源路径
+	args = append(args, opts.Source)
+
+	// 添加排除规则
+	for _, exclude := range opts.Excludes {
+		args = append(args, "-xr!"+exclude)
+	}
+
+	// 创建命令
+	command := exec.CommandContext(ctx, cmd7z, args...)
+
+	// 更新进度（7z 不能很好地获取进度，所以我们模拟）
+	stats.CurrentFile = "Compressing with 7z..."
+	if opts.OnStats != nil {
+		opts.OnStats(*stats)
+	}
+
+	// 执行命令
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("7z compression failed: %s\n%s", err, string(output))
+	}
+
+	// 更新统计
+	stats.ProcessedFiles = len(files)
+
+	return nil
 }
 
 // compressZip 使用 ZIP 格式压缩

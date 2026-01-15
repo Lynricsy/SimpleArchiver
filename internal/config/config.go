@@ -104,6 +104,7 @@ type ArchiveFormat struct {
 func GetArchiveFormats() []ArchiveFormat {
 	return []ArchiveFormat{
 		{Name: "ZIP", Extension: ".zip", Description: "通用压缩格式，兼容性最好"},
+		{Name: "7z", Extension: ".7z", Description: "高压缩率，需安装 7z 命令"},
 		{Name: "TAR.GZ", Extension: ".tar.gz", Description: "Linux 常用格式，压缩率中等"},
 		{Name: "TAR.BZ2", Extension: ".tar.bz2", Description: "压缩率较高，速度较慢"},
 		{Name: "TAR.XZ", Extension: ".tar.xz", Description: "压缩率最高，速度最慢"},

@@ -24,7 +24,7 @@ import (
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.5.0"
+	AppVersion = "1.6.0"
 )
 
 // 操作模式
@@ -548,6 +548,14 @@ func (m model) updateSelectFormat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter", " ":
 		m.selectedFormat = m.formats[m.formatCursor]
+
+		// 检查 7z 格式是否可用
+		if m.selectedFormat.Extension == ".7z" && !archiver.Is7zAvailable() {
+			m.state = stateError
+			m.errorMsg = "7z command not found. Please install p7zip:\n  - Ubuntu/Debian: sudo apt install p7zip-full\n  - macOS: brew install p7zip\n  - Windows: Download from https://www.7-zip.org/"
+			return m, nil
+		}
+
 		m.outputPath = m.selectedPath + m.selectedFormat.Extension
 		m.state = stateSelectExcludes
 	}
