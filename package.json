@@ -1,6 +1,6 @@
 {
   "name": "simple-archiver-tui",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "A beautiful TUI file archiver with multi-format support",
   "keywords": [
     "archive",

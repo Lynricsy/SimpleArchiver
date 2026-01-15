@@ -24,7 +24,7 @@ import (
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.6.2"
+	AppVersion = "1.7.0"
 )
 
 // 操作模式
@@ -33,6 +33,45 @@ type opMode int
 const (
 	modeCompress opMode = iota
 	modeExtract
+)
+
+// Nerd Font 图标定义
+const (
+	// 文件类型图标
+	iconArchive     = ""  // nf-fa-file_archive_o
+	iconFolder      = ""  // nf-fa-folder
+	iconFolderOpen  = ""  // nf-fa-folder_open
+	iconFile        = ""  // nf-fa-file_o
+	iconLocation    = ""  // nf-oct-location
+	
+	// 操作图标
+	iconCompress    = ""  // nf-oct-package
+	iconExtract     = ""  // nf-fa-folder_open
+	iconRocket      = ""  // nf-fa-rocket
+	iconCheck       = ""  // nf-fa-check
+	iconCheckbox    = ""  // nf-fa-check_square_o
+	iconCheckboxOff = ""  // nf-fa-square_o
+	iconLock        = ""  // nf-fa-lock
+	iconUnlock      = ""  // nf-fa-unlock
+	iconKey         = ""  // nf-fa-key
+	
+	// 状态图标
+	iconSuccess     = ""  // nf-fa-check_circle
+	iconError       = ""  // nf-fa-times_circle
+	iconWarning     = ""  // nf-fa-exclamation_triangle
+	iconInfo        = ""  // nf-fa-info_circle
+	iconSpinner     = ""  // nf-fa-spinner
+	
+	// 导航图标
+	iconArrowRight  = ""  // nf-cod-chevron_right
+	iconArrowDown   = ""  // nf-cod-chevron_down
+	iconPointer     = ""  // nf-fa-caret_right
+	
+	// Powerline 箭头
+	plArrowRight    = ""  // Powerline right arrow
+	plArrowLeft     = ""  // Powerline left arrow
+	plArrowThinR    = ""  // Powerline thin right arrow
+	plArrowThinL    = ""  // Powerline thin left arrow
 )
 
 // 颜色定义
@@ -46,6 +85,11 @@ var (
 	foregroundColor = lipgloss.Color("#F9FAFB")
 	borderColor     = lipgloss.Color("#374151")
 	archiveColor    = lipgloss.Color("#EC4899") // 粉色用于压缩文件
+	
+	// 状态栏颜色
+	statusBgDark    = lipgloss.Color("#1F2937")
+	statusBgMid     = lipgloss.Color("#374151")
+	statusBgAccent  = lipgloss.Color("#4B5563")
 )
 
 // 样式定义
@@ -118,25 +162,6 @@ var (
 
 	archiveIconStyle = lipgloss.NewStyle().
 			Foreground(archiveColor)
-
-	// Zellij 风格状态栏样式
-	statusBarStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1F2937")).
-			Foreground(foregroundColor).
-			Padding(0, 1)
-
-	statusKeyStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#374151")).
-			Foreground(lipgloss.Color("#F59E0B")).
-			Bold(true).
-			Padding(0, 1)
-
-	statusDescStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#9CA3AF")).
-			Padding(0, 1)
-
-	statusSepStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#4B5563"))
 )
 
 // AppState 应用状态
@@ -1009,7 +1034,7 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm", hours, mins)
 }
 
-// renderStatusBar 渲染 Zellij 风格的底部快捷键提示栏
+// renderStatusBar 渲染 Powerlevel10k 风格的底部快捷键提示栏
 func (m model) renderStatusBar() string {
 	t := i18n.T()
 	type keyHint struct {
@@ -1074,19 +1099,79 @@ func (m model) renderStatusBar() string {
 		}
 	}
 
-	var parts []string
-	for _, h := range hints {
-		key := statusKeyStyle.Render(h.key)
-		desc := statusDescStyle.Render(h.desc)
-		parts = append(parts, key+desc)
+	// Powerlevel10k 风格渲染
+	var sb strings.Builder
+	
+	// 定义交替的背景颜色
+	colors := []lipgloss.Color{
+		lipgloss.Color("#3B82F6"), // 蓝色
+		lipgloss.Color("#8B5CF6"), // 紫色
+		lipgloss.Color("#EC4899"), // 粉色
+		lipgloss.Color("#F59E0B"), // 橙色
+		lipgloss.Color("#10B981"), // 绿色
+		lipgloss.Color("#06B6D4"), // 青色
 	}
 
-	sep := statusSepStyle.Render(" │ ")
-	content := strings.Join(parts, sep)
+	for i, h := range hints {
+		bgColor := colors[i%len(colors)]
+		nextBgColor := statusBgDark
+		if i < len(hints)-1 {
+			nextBgColor = colors[(i+1)%len(colors)]
+		}
 
-	// 创建全宽状态栏
-	bar := statusBarStyle.Width(m.width).Render(content)
-	return bar
+		// 键名部分
+		keyStyle := lipgloss.NewStyle().
+			Background(bgColor).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Bold(true).
+			Padding(0, 1)
+
+		// 描述部分（稍暗的背景）
+		descBgColor := lipgloss.Color(darkenColor(string(bgColor)))
+		descStyle := lipgloss.NewStyle().
+			Background(descBgColor).
+			Foreground(lipgloss.Color("#F9FAFB")).
+			Padding(0, 1)
+
+		// 箭头分隔符
+		arrowStyle := lipgloss.NewStyle().
+			Background(nextBgColor).
+			Foreground(descBgColor)
+
+		sb.WriteString(keyStyle.Render(h.key))
+		sb.WriteString(descStyle.Render(h.desc))
+		sb.WriteString(arrowStyle.Render(plArrowRight))
+	}
+
+	// 填充剩余空间
+	content := sb.String()
+	contentWidth := lipgloss.Width(content)
+	if contentWidth < m.width {
+		padding := lipgloss.NewStyle().
+			Background(statusBgDark).
+			Width(m.width - contentWidth).
+			Render("")
+		content += padding
+	}
+
+	return content
+}
+
+// darkenColor 将颜色变暗
+func darkenColor(hex string) string {
+	// 简单的颜色变暗映射
+	darkMap := map[string]string{
+		"#3B82F6": "#2563EB", // 蓝色
+		"#8B5CF6": "#7C3AED", // 紫色
+		"#EC4899": "#DB2777", // 粉色
+		"#F59E0B": "#D97706", // 橙色
+		"#10B981": "#059669", // 绿色
+		"#06B6D4": "#0891B2", // 青色
+	}
+	if dark, ok := darkMap[hex]; ok {
+		return dark
+	}
+	return "#374151"
 }
 
 // View 渲染视图
@@ -1094,19 +1179,28 @@ func (m model) View() string {
 	t := i18n.T()
 	var sb strings.Builder
 
-	// 标题
+	// 标题 - 使用 Nerd Font 图标
 	modeStr := t.ModeCompress
+	modeIcon := iconCompress
 	if m.mode == modeExtract {
 		modeStr = t.ModeExtract
+		modeIcon = iconExtract
 	}
+	
+	headerText := fmt.Sprintf(" %s %s v%s  %s %s ", iconArchive, AppName, AppVersion, modeIcon, modeStr)
 	header := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(foregroundColor).
 		Background(primaryColor).
-		Padding(0, 2).
-		MarginBottom(1).
-		Render(fmt.Sprintf("📦 %s v%s - %s", AppName, AppVersion, modeStr))
-	sb.WriteString(header)
+		Padding(0, 1).
+		Render(headerText)
+	
+	// 添加 Powerline 风格的箭头尾部
+	headerArrow := lipgloss.NewStyle().
+		Foreground(primaryColor).
+		Render(plArrowRight)
+	
+	sb.WriteString(header + headerArrow)
 	sb.WriteString("\n\n")
 
 	// 主内容区域
@@ -1133,7 +1227,22 @@ func (m model) View() string {
 	case stateError:
 		content = m.viewError()
 	}
-	sb.WriteString(content)
+
+	// 内容区域宽度限制，用于居中
+	maxContentWidth := 80
+	if m.width < maxContentWidth {
+		maxContentWidth = m.width - 4
+	}
+	
+	// 将内容居中显示
+	contentWidth := lipgloss.Width(content)
+	if contentWidth < maxContentWidth {
+		// 内容比最大宽度小，保持原样
+	}
+	
+	// 居中主内容
+	centeredContent := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, content)
+	sb.WriteString(centeredContent)
 
 	// 计算需要填充的空行数，使状态栏固定在底部
 	contentLines := strings.Count(sb.String(), "\n") + 1
@@ -1163,21 +1272,24 @@ func (m model) viewSelectMode() string {
 	sb.WriteString("\n\n")
 
 	modes := []struct {
-		icon string
-		name string
-		desc string
+		icon  string
+		color lipgloss.Color
+		name  string
+		desc  string
 	}{
-		{"🗜️", t.CompressOption, t.CompressOptionDesc},
-		{"📂", t.ExtractOption, t.ExtractOptionDesc},
+		{iconCompress, primaryColor, t.CompressOption, t.CompressOptionDesc},
+		{iconFolderOpen, successColor, t.ExtractOption, t.ExtractOptionDesc},
 	}
 
 	for i, mode := range modes {
 		cursor := "  "
 		if i == m.modeCursor {
-			cursor = "▸ "
+			cursor = iconPointer + " "
 		}
 
-		icon := mode.icon
+		iconStyle := lipgloss.NewStyle().Foreground(mode.color)
+		icon := iconStyle.Render(mode.icon)
+		
 		var name string
 		if i == m.modeCursor {
 			name = selectedStyle.Render(mode.name)
@@ -1186,7 +1298,7 @@ func (m model) viewSelectMode() string {
 		}
 
 		desc := subtitleStyle.Render(" - " + mode.desc)
-		sb.WriteString(fmt.Sprintf("%s%s %s%s\n", cursor, icon, name, desc))
+		sb.WriteString(fmt.Sprintf("%s%s  %s%s\n", cursor, icon, name, desc))
 	}
 
 	return borderStyle.Render(sb.String())
@@ -1208,7 +1320,7 @@ func (m model) viewSelectFile() string {
 	pathStyle := lipgloss.NewStyle().
 		Foreground(secondaryColor).
 		Bold(true)
-	sb.WriteString(pathStyle.Render("📍 " + m.cwd))
+	sb.WriteString(pathStyle.Render(iconLocation + "  " + m.cwd))
 	sb.WriteString("\n\n")
 
 	// 文件列表
@@ -1236,21 +1348,21 @@ func (m model) viewSelectFile() string {
 		entry := m.entries[i]
 		cursor := "  "
 		if i == m.cursor {
-			cursor = "▸ "
+			cursor = iconPointer + " "
 		}
 
 		var line string
 		if entry.isDir {
-			icon := folderIconStyle.Render("📁")
+			icon := folderIconStyle.Render(iconFolder)
 			name := entry.name + "/"
 			if i == m.cursor {
 				name = selectedStyle.Render(name)
 			} else {
 				name = normalStyle.Render(name)
 			}
-			line = fmt.Sprintf("%s%s %s", cursor, icon, name)
+			line = fmt.Sprintf("%s%s  %s", cursor, icon, name)
 		} else if entry.isArchive {
-			icon := archiveIconStyle.Render("📦")
+			icon := archiveIconStyle.Render(iconArchive)
 			name := entry.name
 			size := formatFileSize(entry.size)
 			if i == m.cursor {
@@ -1259,9 +1371,9 @@ func (m model) viewSelectFile() string {
 				name = normalStyle.Render(name)
 			}
 			sizeStr := lipgloss.NewStyle().Foreground(mutedColor).Render("(" + size + ")")
-			line = fmt.Sprintf("%s%s %s %s", cursor, icon, name, sizeStr)
+			line = fmt.Sprintf("%s%s  %s %s", cursor, icon, name, sizeStr)
 		} else {
-			icon := fileIconStyle.Render("📄")
+			icon := fileIconStyle.Render(iconFile)
 			name := entry.name
 			size := formatFileSize(entry.size)
 			if i == m.cursor {
@@ -1270,7 +1382,7 @@ func (m model) viewSelectFile() string {
 				name = normalStyle.Render(name)
 			}
 			sizeStr := lipgloss.NewStyle().Foreground(mutedColor).Render("(" + size + ")")
-			line = fmt.Sprintf("%s%s %s %s", cursor, icon, name, sizeStr)
+			line = fmt.Sprintf("%s%s  %s %s", cursor, icon, name, sizeStr)
 		}
 
 		sb.WriteString(line)
@@ -1301,9 +1413,10 @@ func (m model) viewSelectFormat() string {
 	for i, format := range m.formats {
 		cursor := "  "
 		if i == m.formatCursor {
-			cursor = "▸ "
+			cursor = iconPointer + " "
 		}
 
+		icon := archiveIconStyle.Render(iconArchive)
 		var name string
 		if i == m.formatCursor {
 			name = selectedStyle.Render(format.Name)
@@ -1312,7 +1425,7 @@ func (m model) viewSelectFormat() string {
 		}
 
 		desc := subtitleStyle.Render(" - " + format.Description)
-		sb.WriteString(fmt.Sprintf("%s%s%s\n", cursor, name, desc))
+		sb.WriteString(fmt.Sprintf("%s%s  %s%s\n", cursor, icon, name, desc))
 	}
 
 	return borderStyle.Render(sb.String())
@@ -1331,13 +1444,13 @@ func (m model) viewSelectExcludes() string {
 	for i, cat := range m.excludeCategories {
 		cursor := "  "
 		if i == m.excludeCursor {
-			cursor = "▸ "
+			cursor = iconPointer + " "
 		}
 
-		checkbox := "☐"
+		checkbox := iconCheckboxOff
 		checkStyle := lipgloss.NewStyle().Foreground(mutedColor)
 		if cat.Selected {
-			checkbox = "☑"
+			checkbox = iconCheckbox
 			checkStyle = lipgloss.NewStyle().Foreground(successColor)
 		}
 
@@ -1357,7 +1470,7 @@ func (m model) viewSelectExcludes() string {
 		}
 		patternsStr := subtitleStyle.Render(" (" + strings.Join(patterns, ", ") + "...)")
 
-		sb.WriteString(fmt.Sprintf("%s%s %s%s\n", cursor, checkStyle.Render(checkbox), name, patternsStr))
+		sb.WriteString(fmt.Sprintf("%s%s  %s%s\n", cursor, checkStyle.Render(checkbox), name, patternsStr))
 	}
 
 	return borderStyle.Render(sb.String())
@@ -1370,7 +1483,7 @@ func (m model) viewInputPassword() string {
 
 	// 解压模式：直接输入密码
 	if m.mode == modeExtract {
-		sb.WriteString(titleStyle.Render(t.PasswordExtract))
+		sb.WriteString(titleStyle.Render(iconKey + "  " + t.PasswordExtract))
 		sb.WriteString("\n")
 		sb.WriteString(subtitleStyle.Render(t.PasswordHint))
 		sb.WriteString("\n\n")
@@ -1393,27 +1506,29 @@ func (m model) viewInputPassword() string {
 	}
 
 	// 压缩模式：选择是否使用密码
-	sb.WriteString(titleStyle.Render(t.PasswordTitle))
+	sb.WriteString(titleStyle.Render(iconKey + "  " + t.PasswordTitle))
 	sb.WriteString("\n")
 	sb.WriteString(subtitleStyle.Render(t.PasswordProtection))
 	sb.WriteString("\n\n")
 
 	options := []struct {
-		icon string
-		name string
-		desc string
+		icon  string
+		color lipgloss.Color
+		name  string
+		desc  string
 	}{
-		{"🔓", t.NoPassword, t.NoPasswordDesc},
-		{"🔒", t.SetPassword, t.SetPasswordDesc},
+		{iconUnlock, warningColor, t.NoPassword, t.NoPasswordDesc},
+		{iconLock, successColor, t.SetPassword, t.SetPasswordDesc},
 	}
 
 	for i, opt := range options {
 		cursor := "  "
 		if i == m.passwordCursor {
-			cursor = "▸ "
+			cursor = iconPointer + " "
 		}
 
-		icon := opt.icon
+		iconStyle := lipgloss.NewStyle().Foreground(opt.color)
+		icon := iconStyle.Render(opt.icon)
 		var name string
 		if i == m.passwordCursor {
 			name = selectedStyle.Render(opt.name)
@@ -1448,53 +1563,53 @@ func (m model) viewConfirm() string {
 	var sb strings.Builder
 
 	if m.mode == modeExtract {
-		sb.WriteString(titleStyle.Render(t.ConfirmExtract))
+		sb.WriteString(titleStyle.Render(iconCheck + "  " + t.ConfirmExtract))
 	} else {
-		sb.WriteString(titleStyle.Render(t.ConfirmCompress))
+		sb.WriteString(titleStyle.Render(iconCheck + "  " + t.ConfirmCompress))
 	}
 	sb.WriteString("\n\n")
 
 	// 源文件
-	sb.WriteString(statLabelStyle.Render(t.SourceFile))
+	sb.WriteString(statLabelStyle.Render(iconFile + "  " + t.SourceFile))
 	sb.WriteString(statValueStyle.Render(filepath.Base(m.selectedPath)))
 	sb.WriteString("\n")
 
 	// 输出
 	if m.mode == modeExtract {
-		sb.WriteString(statLabelStyle.Render(t.ExtractTo))
+		sb.WriteString(statLabelStyle.Render(iconFolderOpen + "  " + t.ExtractTo))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath) + "/"))
 		sb.WriteString("\n")
 
 		// 显示密码状态（解压模式）
 		format := archiver.DetectArchiveFormat(m.selectedPath)
 		if format == ".zip" || format == ".7z" {
-			sb.WriteString(statLabelStyle.Render(t.ExtractPassword))
+			sb.WriteString(statLabelStyle.Render(iconKey + "  " + t.ExtractPassword))
 			if m.password != "" {
-				sb.WriteString(infoStyle.Render(t.PasswordSet))
+				sb.WriteString(infoStyle.Render(iconLock + " " + t.PasswordSet))
 			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render(t.PasswordNone))
+				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render(iconUnlock + " " + t.PasswordNone))
 			}
 			sb.WriteString("\n")
 		}
 	} else {
-		sb.WriteString(statLabelStyle.Render(t.OutputFile))
+		sb.WriteString(statLabelStyle.Render(iconArchive + "  " + t.OutputFile))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath)))
 	}
 	sb.WriteString("\n")
 
 	if m.mode == modeCompress {
 		// 压缩格式
-		sb.WriteString(statLabelStyle.Render(t.CompressFormat))
+		sb.WriteString(statLabelStyle.Render(iconCompress + "  " + t.CompressFormat))
 		sb.WriteString(infoStyle.Render(m.selectedFormat.Name))
 		sb.WriteString("\n")
 
 		// 密码保护
 		if m.selectedFormat.Extension == ".zip" {
-			sb.WriteString(statLabelStyle.Render(t.PasswordProtect))
+			sb.WriteString(statLabelStyle.Render(iconKey + "  " + t.PasswordProtect))
 			if m.usePassword {
-				sb.WriteString(successStyle.Render(t.AESEncrypted))
+				sb.WriteString(successStyle.Render(iconLock + " " + t.AESEncrypted))
 			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render(t.PasswordNone))
+				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render(iconUnlock + " " + t.PasswordNone))
 			}
 			sb.WriteString("\n")
 		}
@@ -1506,7 +1621,7 @@ func (m model) viewConfirm() string {
 				excludeCount += len(cat.Patterns)
 			}
 		}
-		sb.WriteString(statLabelStyle.Render(t.ExcludeRules))
+		sb.WriteString(statLabelStyle.Render(iconWarning + "  " + t.ExcludeRules))
 		sb.WriteString(warningStyle.Render(fmt.Sprintf(t.PatternsCount, excludeCount)))
 		sb.WriteString("\n")
 	}
@@ -1526,7 +1641,7 @@ func (m model) viewCompressing() string {
 	t := i18n.T()
 	var sb strings.Builder
 
-	sb.WriteString(titleStyle.Render(t.Compressing))
+	sb.WriteString(titleStyle.Render(iconRocket + "  " + t.Compressing))
 	sb.WriteString("\n\n")
 
 	// Spinner
@@ -1539,9 +1654,9 @@ func (m model) viewCompressing() string {
 		if len(currentFile) > 50 {
 			currentFile = "..." + currentFile[len(currentFile)-47:]
 		}
-		sb.WriteString(infoStyle.Render(currentFile))
+		sb.WriteString(infoStyle.Render(iconFile + "  " + currentFile))
 	} else {
-		sb.WriteString(subtitleStyle.Render(t.Preparing))
+		sb.WriteString(subtitleStyle.Render(iconSpinner + "  " + t.Preparing))
 	}
 	sb.WriteString("\n\n")
 
@@ -1598,7 +1713,7 @@ func (m model) viewExtracting() string {
 	t := i18n.T()
 	var sb strings.Builder
 
-	sb.WriteString(titleStyle.Render(t.Extracting))
+	sb.WriteString(titleStyle.Render(iconRocket + "  " + t.Extracting))
 	sb.WriteString("\n\n")
 
 	// Spinner
@@ -1611,9 +1726,9 @@ func (m model) viewExtracting() string {
 		if len(currentFile) > 50 {
 			currentFile = "..." + currentFile[len(currentFile)-47:]
 		}
-		sb.WriteString(infoStyle.Render(currentFile))
+		sb.WriteString(infoStyle.Render(iconFile + "  " + currentFile))
 	} else {
-		sb.WriteString(subtitleStyle.Render(t.Preparing))
+		sb.WriteString(subtitleStyle.Render(iconSpinner + "  " + t.Preparing))
 	}
 	sb.WriteString("\n\n")
 
@@ -1669,55 +1784,55 @@ func (m model) viewDone() string {
 	var sb strings.Builder
 
 	if m.mode == modeExtract {
-		sb.WriteString(successStyle.Render(t.ExtractDone))
+		sb.WriteString(successStyle.Render(iconSuccess + "  " + t.ExtractDone))
 		sb.WriteString("\n\n")
 
 		// 输出目录
-		sb.WriteString(statLabelStyle.Render(t.ExtractToLabel))
+		sb.WriteString(statLabelStyle.Render(iconFolderOpen + "  " + t.ExtractToLabel))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath) + "/"))
 		sb.WriteString("\n")
 
 		// 解压文件数
-		sb.WriteString(statLabelStyle.Render(t.ExtractedFiles))
+		sb.WriteString(statLabelStyle.Render(iconFile + "  " + t.ExtractedFiles))
 		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d", m.extractStats.TotalFiles)))
 		sb.WriteString("\n")
 
 		// 解压大小
-		sb.WriteString(statLabelStyle.Render(t.ExtractedSize))
+		sb.WriteString(statLabelStyle.Render(iconInfo + "  " + t.ExtractedSize))
 		sb.WriteString(successStyle.Render(formatFileSize(m.extractStats.ExtractedSize)))
 		sb.WriteString("\n")
 	} else {
-		sb.WriteString(successStyle.Render(t.CompressDone))
+		sb.WriteString(successStyle.Render(iconSuccess + "  " + t.CompressDone))
 		sb.WriteString("\n\n")
 
 		// 输出文件
-		sb.WriteString(statLabelStyle.Render(t.OutputFileLabel))
+		sb.WriteString(statLabelStyle.Render(iconArchive + "  " + t.OutputFileLabel))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath)))
 		sb.WriteString("\n")
 
 		// 压缩文件数
-		sb.WriteString(statLabelStyle.Render(t.CompressedFiles))
+		sb.WriteString(statLabelStyle.Render(iconFile + "  " + t.CompressedFiles))
 		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d", m.compressStats.TotalFiles)))
 		sb.WriteString("\n")
 
 		// 原始大小
-		sb.WriteString(statLabelStyle.Render(t.OriginalSize))
+		sb.WriteString(statLabelStyle.Render(iconInfo + "  " + t.OriginalSize))
 		sb.WriteString(infoStyle.Render(formatFileSize(m.compressStats.TotalSize)))
 		sb.WriteString("\n")
 
 		// 压缩后大小
-		sb.WriteString(statLabelStyle.Render(t.CompressedSize))
+		sb.WriteString(statLabelStyle.Render(iconCompress + "  " + t.CompressedSize))
 		sb.WriteString(successStyle.Render(formatFileSize(m.compressStats.CompressedSize)))
 		sb.WriteString("\n")
 
 		// 压缩率
-		sb.WriteString(statLabelStyle.Render(t.CompressionRate))
+		sb.WriteString(statLabelStyle.Render(iconSuccess + "  " + t.CompressionRate))
 		sb.WriteString(successStyle.Render(fmt.Sprintf("%.1f%%", m.compressStats.CompressionRate)))
 		sb.WriteString("\n")
 
 		// 排除文件数
 		if m.compressStats.ExcludedFiles > 0 {
-			sb.WriteString(statLabelStyle.Render(t.ExcludedFiles))
+			sb.WriteString(statLabelStyle.Render(iconWarning + "  " + t.ExcludedFiles))
 			sb.WriteString(warningStyle.Render(fmt.Sprintf("%d", m.compressStats.ExcludedFiles)))
 			sb.WriteString("\n")
 		}
@@ -1732,13 +1847,13 @@ func (m model) viewError() string {
 	var sb strings.Builder
 
 	if m.mode == modeExtract {
-		sb.WriteString(errorStyle.Render(t.ExtractFailed))
+		sb.WriteString(errorStyle.Render(iconError + "  " + t.ExtractFailed))
 	} else {
-		sb.WriteString(errorStyle.Render(t.CompressFailed))
+		sb.WriteString(errorStyle.Render(iconError + "  " + t.CompressFailed))
 	}
 	sb.WriteString("\n\n")
 
-	sb.WriteString(statLabelStyle.Render(t.ErrorMessage))
+	sb.WriteString(statLabelStyle.Render(iconWarning + "  " + t.ErrorMessage))
 	sb.WriteString("\n")
 	sb.WriteString(errorStyle.Render(m.errorMsg))
 
