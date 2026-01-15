@@ -1,5 +1,8 @@
 # 编译输出
 simple-archiver
+
+# Agent日志
+AgentLogs/
 *.exe
 *.dll
 *.so
