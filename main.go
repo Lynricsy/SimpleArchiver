@@ -472,13 +472,23 @@ func (m model) updateSelectFile(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					// 移除所有扩展名
 					for {
 						ext := filepath.Ext(baseName)
-						if ext == "" || (!strings.HasPrefix(ext, ".tar") && ext != ".zip" && ext != ".gz" && ext != ".bz2" && ext != ".xz" && ext != ".zst" && ext != ".lz4" && ext != ".tgz" && ext != ".tbz2" && ext != ".txz") {
+						if ext == "" || (!strings.HasPrefix(ext, ".tar") && ext != ".zip" && ext != ".gz" && ext != ".bz2" && ext != ".xz" && ext != ".zst" && ext != ".lz4" && ext != ".tgz" && ext != ".tbz2" && ext != ".txz" && ext != ".7z") {
 							break
 						}
 						baseName = strings.TrimSuffix(baseName, ext)
 					}
 					m.outputPath = filepath.Join(filepath.Dir(entry.path), baseName)
-					m.state = stateConfirm
+					
+					// 检测是否是支持密码的格式（ZIP或7z）
+					format := archiver.DetectArchiveFormat(entry.path)
+					if format == ".zip" || format == ".7z" {
+						// 进入密码输入界面
+						m.state = stateInputPassword
+						m.passwordCursor = 0
+						m.passwordInput = ""
+					} else {
+						m.state = stateConfirm
+					}
 				}
 			} else {
 				// 压缩模式
@@ -559,6 +569,34 @@ func (m model) updateSelectExcludes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // updateInputPassword 更新密码输入状态
 func (m model) updateInputPassword(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// 解压模式：简化的密码输入（只有输入密码选项）
+	if m.mode == modeExtract {
+		switch msg.String() {
+		case "q", "esc":
+			m.state = stateSelectFile
+			m.passwordInput = ""
+			m.password = ""
+
+		case "enter":
+			// 确认密码（可以为空，表示尝试无密码解压）
+			m.password = m.passwordInput
+			m.state = stateConfirm
+
+		case "backspace":
+			if len(m.passwordInput) > 0 {
+				m.passwordInput = m.passwordInput[:len(m.passwordInput)-1]
+			}
+
+		default:
+			// 记录输入
+			if len(msg.String()) == 1 {
+				m.passwordInput += msg.String()
+			}
+		}
+		return m, nil
+	}
+
+	// 压缩模式：选择是否使用密码
 	switch msg.String() {
 	case "q", "esc":
 		m.state = stateSelectExcludes
@@ -612,7 +650,13 @@ func (m model) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc", "n":
 		if m.mode == modeExtract {
-			m.state = stateSelectFile
+			// 检测是否是支持密码的格式
+			format := archiver.DetectArchiveFormat(m.selectedPath)
+			if format == ".zip" || format == ".7z" {
+				m.state = stateInputPassword
+			} else {
+				m.state = stateSelectFile
+			}
 		} else if m.selectedFormat.Extension == ".zip" {
 			m.state = stateInputPassword
 		} else {
@@ -682,8 +726,9 @@ func (m *model) startExtract() tea.Cmd {
 		m.operationCancel = cancel
 
 		opts := archiver.ExtractOptions{
-			Source: m.selectedPath,
-			Output: m.outputPath,
+			Source:   m.selectedPath,
+			Output:   m.outputPath,
+			Password: m.password,
 		}
 
 		stats, err := archiver.Extract(ctx, opts)
@@ -957,6 +1002,33 @@ func (m model) viewSelectExcludes() string {
 func (m model) viewInputPassword() string {
 	var sb strings.Builder
 
+	// 解压模式：直接输入密码
+	if m.mode == modeExtract {
+		sb.WriteString(titleStyle.Render("🔐 输入解压密码"))
+		sb.WriteString("\n")
+		sb.WriteString(subtitleStyle.Render("如果归档文件有密码保护，请输入密码"))
+		sb.WriteString("\n\n")
+
+		sb.WriteString(statLabelStyle.Render("文件:"))
+		sb.WriteString(statValueStyle.Render(filepath.Base(m.selectedPath)))
+		sb.WriteString("\n\n")
+
+		sb.WriteString(statLabelStyle.Render("密码:"))
+		passwordDisplay := strings.Repeat("●", len(m.passwordInput))
+		if passwordDisplay == "" {
+			passwordDisplay = lipgloss.NewStyle().Foreground(mutedColor).Render("(留空=无密码，直接Enter确认)")
+		} else {
+			passwordDisplay = infoStyle.Render(passwordDisplay)
+		}
+		sb.WriteString(passwordDisplay)
+		sb.WriteString("\n")
+
+		sb.WriteString(helpStyle.Render("\n输入密码 | Enter 确认 | Esc 返回"))
+
+		return borderStyle.Render(sb.String())
+	}
+
+	// 压缩模式：选择是否使用密码
 	sb.WriteString(titleStyle.Render("🔐 密码保护设置"))
 	sb.WriteString("\n")
 	sb.WriteString(subtitleStyle.Render("ZIP格式支持 AES-256 加密保护"))
@@ -1028,6 +1100,19 @@ func (m model) viewConfirm() string {
 	if m.mode == modeExtract {
 		sb.WriteString(statLabelStyle.Render("解压到:"))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath) + "/"))
+		sb.WriteString("\n")
+
+		// 显示密码状态（解压模式）
+		format := archiver.DetectArchiveFormat(m.selectedPath)
+		if format == ".zip" || format == ".7z" {
+			sb.WriteString(statLabelStyle.Render("解压密码:"))
+			if m.password != "" {
+				sb.WriteString(infoStyle.Render("🔑 已设置"))
+			} else {
+				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("🔓 无"))
+			}
+			sb.WriteString("\n")
+		}
 	} else {
 		sb.WriteString(statLabelStyle.Render("输出文件:"))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath)))
