@@ -33,6 +33,28 @@
 
 ## 🚀 安装
 
+### ⚡ 即用即走（推荐）
+
+无需安装，一行命令即可运行！适合临时使用或快速体验：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Lynricsy/SimpleArchiver/main/run.sh)
+```
+
+> 💡 该脚本会自动检测系统架构，优先下载预编译版本，如无可用版本则使用 Go 环境编译运行。
+
+如果你有 Go 环境，也可以直接运行：
+
+```bash
+go run github.com/Lynricsy/SimpleArchiver@latest
+```
+
+### 使用 Go Install
+
+```bash
+go install github.com/Lynricsy/SimpleArchiver@latest
+```
+
 ### 从源码编译
 
 ```bash
@@ -45,12 +67,6 @@ go build -o simple-archiver .
 
 # 运行
 ./simple-archiver
-```
-
-### 使用 Go Install
-
-```bash
-go install github.com/Lynricsy/SimpleArchiver@latest
 ```
 
 ## 📖 使用方法
