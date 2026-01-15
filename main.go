@@ -23,7 +23,7 @@ import (
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.3.0"
+	AppVersion = "1.4.0"
 )
 
 // 操作模式
@@ -116,7 +116,26 @@ var (
 			Foreground(secondaryColor)
 
 	archiveIconStyle = lipgloss.NewStyle().
-				Foreground(archiveColor)
+			Foreground(archiveColor)
+
+	// Zellij 风格状态栏样式
+	statusBarStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(foregroundColor).
+			Padding(0, 1)
+
+	statusKeyStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#374151")).
+			Foreground(lipgloss.Color("#F59E0B")).
+			Bold(true).
+			Padding(0, 1)
+
+	statusDescStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#9CA3AF")).
+			Padding(0, 1)
+
+	statusSepStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#4B5563"))
 )
 
 // AppState 应用状态
@@ -857,6 +876,85 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm", hours, mins)
 }
 
+// renderStatusBar 渲染 Zellij 风格的底部快捷键提示栏
+func (m model) renderStatusBar() string {
+	type keyHint struct {
+		key  string
+		desc string
+	}
+
+	var hints []keyHint
+
+	switch m.state {
+	case stateSelectMode:
+		hints = []keyHint{
+			{"↑/k", "上移"},
+			{"↓/j", "下移"},
+			{"Enter", "选择"},
+			{"q", "退出"},
+		}
+	case stateSelectFile:
+		hints = []keyHint{
+			{"↑/k", "上移"},
+			{"↓/j", "下移"},
+			{"Enter/l", "进入"},
+			{"h/BS", "返回"},
+			{"Space", "选择"},
+			{"Esc", "返回"},
+		}
+	case stateSelectFormat:
+		hints = []keyHint{
+			{"↑/k", "上移"},
+			{"↓/j", "下移"},
+			{"Enter", "确认"},
+			{"Esc", "返回"},
+		}
+	case stateSelectExcludes:
+		hints = []keyHint{
+			{"↑/k", "上移"},
+			{"↓/j", "下移"},
+			{"Space", "切换"},
+			{"a", "全选"},
+			{"n", "清除"},
+			{"Enter", "确认"},
+			{"Esc", "返回"},
+		}
+	case stateInputPassword:
+		hints = []keyHint{
+			{"输入", "密码"},
+			{"Enter", "确认"},
+			{"Esc", "返回"},
+		}
+	case stateConfirm:
+		hints = []keyHint{
+			{"y/Enter", "确认"},
+			{"n/Esc", "返回"},
+		}
+	case stateCompressing, stateExtracting:
+		hints = []keyHint{
+			{"Ctrl+C", "取消"},
+		}
+	case stateDone, stateError:
+		hints = []keyHint{
+			{"Enter/q", "退出"},
+		}
+	}
+
+	var parts []string
+	for _, h := range hints {
+		key := statusKeyStyle.Render(h.key)
+		desc := statusDescStyle.Render(h.desc)
+		parts = append(parts, key+desc)
+	}
+
+	sep := statusSepStyle.Render(" │ ")
+	content := strings.Join(parts, sep)
+
+	// 创建全宽状态栏
+	bar := statusBarStyle.Width(m.width).Render(content)
+	return bar
+}
+
 // View 渲染视图
 func (m model) View() string {
 	var sb strings.Builder
@@ -876,28 +974,47 @@ func (m model) View() string {
 	sb.WriteString(header)
 	sb.WriteString("\n\n")
 
+	// 主内容区域
+	var content string
 	switch m.state {
 	case stateSelectMode:
-		sb.WriteString(m.viewSelectMode())
+		content = m.viewSelectMode()
 	case stateSelectFile:
-		sb.WriteString(m.viewSelectFile())
+		content = m.viewSelectFile()
 	case stateSelectFormat:
-		sb.WriteString(m.viewSelectFormat())
+		content = m.viewSelectFormat()
 	case stateSelectExcludes:
-		sb.WriteString(m.viewSelectExcludes())
+		content = m.viewSelectExcludes()
 	case stateInputPassword:
-		sb.WriteString(m.viewInputPassword())
+		content = m.viewInputPassword()
 	case stateConfirm:
-		sb.WriteString(m.viewConfirm())
+		content = m.viewConfirm()
 	case stateCompressing:
-		sb.WriteString(m.viewCompressing())
+		content = m.viewCompressing()
 	case stateExtracting:
-		sb.WriteString(m.viewExtracting())
+		content = m.viewExtracting()
 	case stateDone:
-		sb.WriteString(m.viewDone())
+		content = m.viewDone()
 	case stateError:
-		sb.WriteString(m.viewError())
+		content = m.viewError()
 	}
+	sb.WriteString(content)
+
+	// 计算需要填充的空行数，使状态栏固定在底部
+	contentLines := strings.Count(sb.String(), "\n") + 1
+	statusBarHeight := 1
+	headerHeight := 3 // 标题区域高度
+	availableHeight := m.height - statusBarHeight - headerHeight
+
+	if contentLines < availableHeight {
+		for i := 0; i < availableHeight-contentLines; i++ {
+			sb.WriteString("\n")
+		}
+	}
+
+	// 添加底部状态栏
+	sb.WriteString("\n")
+	sb.WriteString(m.renderStatusBar())
 
 	return sb.String()
 }
@@ -935,8 +1052,6 @@ func (m model) viewSelectMode() string {
 		desc := subtitleStyle.Render(" - " + mode.desc)
 		sb.WriteString(fmt.Sprintf("%s%s %s%s\n", cursor, icon, name, desc))
 	}
-
-	sb.WriteString(helpStyle.Render("\n↑/k 上移 | ↓/j 下移 | Enter/Space 选择 | q 退出"))
 
 	return borderStyle.Render(sb.String())
 }
@@ -1033,8 +1148,6 @@ func (m model) viewSelectFile() string {
 		sb.WriteString(scrollInfo)
 	}
 
-	sb.WriteString(helpStyle.Render("\n\n↑/k 上移 | ↓/j 下移 | Enter/l 进入 | Backspace/h 返回 | Space 选择 | Esc 返回"))
-
 	return borderStyle.Render(sb.String())
 }
 
@@ -1063,8 +1176,6 @@ func (m model) viewSelectFormat() string {
 		desc := subtitleStyle.Render(" - " + format.Description)
 		sb.WriteString(fmt.Sprintf("%s%s%s\n", cursor, name, desc))
 	}
-
-	sb.WriteString(helpStyle.Render("\n↑/k 上移 | ↓/j 下移 | Enter/Space 确认 | Esc 返回"))
 
 	return borderStyle.Render(sb.String())
 }
@@ -1110,8 +1221,6 @@ func (m model) viewSelectExcludes() string {
 		sb.WriteString(fmt.Sprintf("%s%s %s%s\n", cursor, checkStyle.Render(checkbox), name, patternsStr))
 	}
 
-	sb.WriteString(helpStyle.Render("\n↑/k 上移 | ↓/j 下移 | Space 切换 | a 全选 | n 全不选 | Enter 确认 | Esc 返回"))
-
 	return borderStyle.Render(sb.String())
 }
 
@@ -1139,8 +1248,6 @@ func (m model) viewInputPassword() string {
 		}
 		sb.WriteString(passwordDisplay)
 		sb.WriteString("\n")
-
-		sb.WriteString(helpStyle.Render("\n输入密码 | Enter 确认 | Esc 返回"))
 
 		return borderStyle.Render(sb.String())
 	}
@@ -1191,8 +1298,6 @@ func (m model) viewInputPassword() string {
 		sb.WriteString(passwordDisplay)
 		sb.WriteString("\n")
 	}
-
-	sb.WriteString(helpStyle.Render("\n↑/k 上移 | ↓/j 下移 | Enter 确认 | Esc 返回"))
 
 	return borderStyle.Render(sb.String())
 }
@@ -1343,8 +1448,6 @@ func (m model) viewCompressing() string {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString(helpStyle.Render("\nCtrl+C 取消"))
-
 	return highlightBorderStyle.Render(sb.String())
 }
 
@@ -1414,8 +1517,6 @@ func (m model) viewExtracting() string {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString(helpStyle.Render("\nCtrl+C 取消"))
-
 	return highlightBorderStyle.Render(sb.String())
 }
 
@@ -1478,8 +1579,6 @@ func (m model) viewDone() string {
 		}
 	}
 
-	sb.WriteString(helpStyle.Render("\n按任意键退出"))
-
 	return highlightBorderStyle.Render(sb.String())
 }
 
@@ -1497,8 +1596,6 @@ func (m model) viewError() string {
 	sb.WriteString(statLabelStyle.Render("错误信息:"))
 	sb.WriteString("\n")
 	sb.WriteString(errorStyle.Render(m.errorMsg))
-
-	sb.WriteString(helpStyle.Render("\n\n按任意键退出"))
 
 	return borderStyle.Render(sb.String())
 }
