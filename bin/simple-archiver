@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+
+/**
+ * SimpleArchiver launcher
+ * Runs the pre-compiled binary
+ */
+
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+
+const binDir = __dirname;
+const ext = process.platform === 'win32' ? '.exe' : '';
+const binaryPath = path.join(binDir, 'simple-archiver' + ext);
+
+// Check if binary exists
+if (!fs.existsSync(binaryPath)) {
+  console.error('❌ Binary not found. Please reinstall the package:');
+  console.error('   npm install -g simple-archiver');
+  process.exit(1);
+}
+
+// Run the binary
+const child = spawn(binaryPath, process.argv.slice(2), {
+  stdio: 'inherit',
+});
+
+child.on('error', (err) => {
+  console.error('❌ Failed to start SimpleArchiver:', err.message);
+  process.exit(1);
+});
+
+child.on('exit', (code) => {
+  process.exit(code || 0);
+});

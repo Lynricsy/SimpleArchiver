@@ -1,0 +1,43 @@
+{
+  "name": "simple-archiver",
+  "version": "1.5.0",
+  "description": "A beautiful TUI file archiver with multi-format support",
+  "keywords": [
+    "archive",
+    "zip",
+    "tar",
+    "compress",
+    "extract",
+    "tui",
+    "cli"
+  ],
+  "homepage": "https://github.com/Lynricsy/SimpleArchiver",
+  "bugs": {
+    "url": "https://github.com/Lynricsy/SimpleArchiver/issues"
+  },
+  "license": "MIT",
+  "author": "Lynricsy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lynricsy/SimpleArchiver.git"
+  },
+  "bin": {
+    "simple-archiver": "./bin/simple-archiver"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64",
+    "ia32"
+  ]
+}

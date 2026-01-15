@@ -1,5 +1,5 @@
 # 编译输出
-simple-archiver
+/simple-archiver
 
 # Agent日志
 AgentLogs/
@@ -7,6 +7,10 @@ AgentLogs/
 *.dll
 *.so
 *.dylib
+
+# Node.js
+node_modules/
+package-lock.json
 
 # 测试输出
 *.test

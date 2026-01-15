@@ -18,12 +18,13 @@ import (
 
 	"github.com/Lynricsy/SimpleArchiver/internal/archiver"
 	"github.com/Lynricsy/SimpleArchiver/internal/config"
+	"github.com/Lynricsy/SimpleArchiver/internal/i18n"
 )
 
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.4.0"
+	AppVersion = "1.5.0"
 )
 
 // 操作模式
@@ -878,6 +879,7 @@ func formatDuration(d time.Duration) string {
 
 // renderStatusBar 渲染 Zellij 风格的底部快捷键提示栏
 func (m model) renderStatusBar() string {
+	t := i18n.T()
 	type keyHint struct {
 		key  string
 		desc string
@@ -888,55 +890,55 @@ func (m model) renderStatusBar() string {
 	switch m.state {
 	case stateSelectMode:
 		hints = []keyHint{
-			{"↑/k", "上移"},
-			{"↓/j", "下移"},
-			{"Enter", "选择"},
-			{"q", "退出"},
+			{"↑/k", t.HintUp},
+			{"↓/j", t.HintDown},
+			{"Enter", t.HintSelect},
+			{"q", t.HintQuit},
 		}
 	case stateSelectFile:
 		hints = []keyHint{
-			{"↑/k", "上移"},
-			{"↓/j", "下移"},
-			{"Enter/l", "进入"},
-			{"h/BS", "返回"},
-			{"Space", "选择"},
-			{"Esc", "返回"},
+			{"↑/k", t.HintUp},
+			{"↓/j", t.HintDown},
+			{"Enter/l", t.HintEnter},
+			{"h/BS", t.HintBack},
+			{"Space", t.HintSelect},
+			{"Esc", t.HintBack},
 		}
 	case stateSelectFormat:
 		hints = []keyHint{
-			{"↑/k", "上移"},
-			{"↓/j", "下移"},
-			{"Enter", "确认"},
-			{"Esc", "返回"},
+			{"↑/k", t.HintUp},
+			{"↓/j", t.HintDown},
+			{"Enter", t.HintConfirm},
+			{"Esc", t.HintBack},
 		}
 	case stateSelectExcludes:
 		hints = []keyHint{
-			{"↑/k", "上移"},
-			{"↓/j", "下移"},
-			{"Space", "切换"},
-			{"a", "全选"},
-			{"n", "清除"},
-			{"Enter", "确认"},
-			{"Esc", "返回"},
+			{"↑/k", t.HintUp},
+			{"↓/j", t.HintDown},
+			{"Space", t.HintToggle},
+			{"a", t.HintSelectAll},
+			{"n", t.HintClear},
+			{"Enter", t.HintConfirm},
+			{"Esc", t.HintBack},
 		}
 	case stateInputPassword:
 		hints = []keyHint{
-			{"输入", "密码"},
-			{"Enter", "确认"},
-			{"Esc", "返回"},
+			{t.HintInput, t.HintPassword},
+			{"Enter", t.HintConfirm},
+			{"Esc", t.HintBack},
 		}
 	case stateConfirm:
 		hints = []keyHint{
-			{"y/Enter", "确认"},
-			{"n/Esc", "返回"},
+			{"y/Enter", t.HintConfirm},
+			{"n/Esc", t.HintBack},
 		}
 	case stateCompressing, stateExtracting:
 		hints = []keyHint{
-			{"Ctrl+C", "取消"},
+			{"Ctrl+C", t.HintCancel},
 		}
 	case stateDone, stateError:
 		hints = []keyHint{
-			{"Enter/q", "退出"},
+			{"Enter/q", t.HintExit},
 		}
 	}
 
@@ -957,12 +959,13 @@ func (m model) renderStatusBar() string {
 
 // View 渲染视图
 func (m model) View() string {
+	t := i18n.T()
 	var sb strings.Builder
 
 	// 标题
-	modeStr := "压缩"
+	modeStr := t.ModeCompress
 	if m.mode == modeExtract {
-		modeStr = "解压"
+		modeStr = t.ModeExtract
 	}
 	header := lipgloss.NewStyle().
 		Bold(true).
@@ -970,7 +973,7 @@ func (m model) View() string {
 		Background(primaryColor).
 		Padding(0, 2).
 		MarginBottom(1).
-		Render(fmt.Sprintf("📦 %s v%s - %s模式", AppName, AppVersion, modeStr))
+		Render(fmt.Sprintf("📦 %s v%s - %s", AppName, AppVersion, modeStr))
 	sb.WriteString(header)
 	sb.WriteString("\n\n")
 
@@ -1021,9 +1024,10 @@ func (m model) View() string {
 
 // viewSelectMode 渲染模式选择视图
 func (m model) viewSelectMode() string {
+	t := i18n.T()
 	var sb strings.Builder
 
-	sb.WriteString(titleStyle.Render("🎯 选择操作模式"))
+	sb.WriteString(titleStyle.Render(t.SelectModeTitle))
 	sb.WriteString("\n\n")
 
 	modes := []struct {
@@ -1031,8 +1035,8 @@ func (m model) viewSelectMode() string {
 		name string
 		desc string
 	}{
-		{"🗜️", "压缩文件/文件夹", "将文件或文件夹压缩为归档文件"},
-		{"📂", "解压归档文件", "将压缩包解压到指定目录"},
+		{"🗜️", t.CompressOption, t.CompressOptionDesc},
+		{"📂", t.ExtractOption, t.ExtractOptionDesc},
 	}
 
 	for i, mode := range modes {
@@ -1058,12 +1062,13 @@ func (m model) viewSelectMode() string {
 
 // viewSelectFile 渲染文件选择视图
 func (m model) viewSelectFile() string {
+	t := i18n.T()
 	var sb strings.Builder
 
 	if m.mode == modeExtract {
-		sb.WriteString(titleStyle.Render("📂 选择要解压的归档文件"))
+		sb.WriteString(titleStyle.Render(t.SelectFileExtract))
 	} else {
-		sb.WriteString(titleStyle.Render("📂 选择要压缩的文件或文件夹"))
+		sb.WriteString(titleStyle.Render(t.SelectFileCompress))
 	}
 	sb.WriteString("\n")
 
@@ -1091,7 +1096,7 @@ func (m model) viewSelectFile() string {
 	}
 
 	if len(m.entries) == 0 {
-		sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("  (空目录)"))
+		sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("  " + t.EmptyDir))
 		sb.WriteString("\n")
 	}
 
@@ -1143,7 +1148,7 @@ func (m model) viewSelectFile() string {
 	// 滚动指示器
 	if len(m.entries) > visibleHeight {
 		scrollInfo := lipgloss.NewStyle().Foreground(mutedColor).Render(
-			fmt.Sprintf("\n  显示 %d-%d / %d", start+1, end, len(m.entries)),
+			fmt.Sprintf("\n  "+t.ShowRange, start+1, end, len(m.entries)),
 		)
 		sb.WriteString(scrollInfo)
 	}
@@ -1153,11 +1158,12 @@ func (m model) viewSelectFile() string {
 
 // viewSelectFormat 渲染格式选择视图
 func (m model) viewSelectFormat() string {
+	t := i18n.T()
 	var sb strings.Builder
 
-	sb.WriteString(titleStyle.Render("📦 选择压缩格式"))
+	sb.WriteString(titleStyle.Render(t.SelectFormat))
 	sb.WriteString("\n")
-	sb.WriteString(subtitleStyle.Render("已选择: " + filepath.Base(m.selectedPath)))
+	sb.WriteString(subtitleStyle.Render(t.SelectedFile + filepath.Base(m.selectedPath)))
 	sb.WriteString("\n\n")
 
 	for i, format := range m.formats {
@@ -1182,11 +1188,12 @@ func (m model) viewSelectFormat() string {
 
 // viewSelectExcludes 渲染排除规则选择视图
 func (m model) viewSelectExcludes() string {
+	t := i18n.T()
 	var sb strings.Builder
 
-	sb.WriteString(titleStyle.Render("🚫 选择排除规则"))
+	sb.WriteString(titleStyle.Render(t.SelectExcludes))
 	sb.WriteString("\n")
-	sb.WriteString(subtitleStyle.Render("格式: " + m.selectedFormat.Name + " | 空格切换选中状态"))
+	sb.WriteString(subtitleStyle.Render(t.ExcludeFormat + m.selectedFormat.Name + t.ToggleHint))
 	sb.WriteString("\n\n")
 
 	for i, cat := range m.excludeCategories {
@@ -1226,23 +1233,24 @@ func (m model) viewSelectExcludes() string {
 
 // viewInputPassword 渲染密码输入视图
 func (m model) viewInputPassword() string {
+	t := i18n.T()
 	var sb strings.Builder
 
 	// 解压模式：直接输入密码
 	if m.mode == modeExtract {
-		sb.WriteString(titleStyle.Render("🔐 输入解压密码"))
+		sb.WriteString(titleStyle.Render(t.PasswordExtract))
 		sb.WriteString("\n")
-		sb.WriteString(subtitleStyle.Render("如果归档文件有密码保护，请输入密码"))
+		sb.WriteString(subtitleStyle.Render(t.PasswordHint))
 		sb.WriteString("\n\n")
 
-		sb.WriteString(statLabelStyle.Render("文件:"))
+		sb.WriteString(statLabelStyle.Render(t.SourceFile))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.selectedPath)))
 		sb.WriteString("\n\n")
 
-		sb.WriteString(statLabelStyle.Render("密码:"))
+		sb.WriteString(statLabelStyle.Render(t.HintPassword + ":"))
 		passwordDisplay := strings.Repeat("●", len(m.passwordInput))
 		if passwordDisplay == "" {
-			passwordDisplay = lipgloss.NewStyle().Foreground(mutedColor).Render("(留空=无密码，直接Enter确认)")
+			passwordDisplay = lipgloss.NewStyle().Foreground(mutedColor).Render(t.PasswordEmpty)
 		} else {
 			passwordDisplay = infoStyle.Render(passwordDisplay)
 		}
@@ -1253,9 +1261,9 @@ func (m model) viewInputPassword() string {
 	}
 
 	// 压缩模式：选择是否使用密码
-	sb.WriteString(titleStyle.Render("🔐 密码保护设置"))
+	sb.WriteString(titleStyle.Render(t.PasswordTitle))
 	sb.WriteString("\n")
-	sb.WriteString(subtitleStyle.Render("ZIP格式支持 AES-256 加密保护"))
+	sb.WriteString(subtitleStyle.Render(t.PasswordProtection))
 	sb.WriteString("\n\n")
 
 	options := []struct {
@@ -1263,8 +1271,8 @@ func (m model) viewInputPassword() string {
 		name string
 		desc string
 	}{
-		{"🔓", "不使用密码", "生成普通ZIP文件"},
-		{"🔒", "设置密码", "使用 AES-256 加密"},
+		{"🔓", t.NoPassword, t.NoPasswordDesc},
+		{"🔒", t.SetPassword, t.SetPasswordDesc},
 	}
 
 	for i, opt := range options {
@@ -1288,10 +1296,10 @@ func (m model) viewInputPassword() string {
 	// 如果选择了使用密码，显示密码输入框
 	if m.passwordCursor == 1 {
 		sb.WriteString("\n")
-		sb.WriteString(statLabelStyle.Render("输入密码:"))
+		sb.WriteString(statLabelStyle.Render(t.InputPassword))
 		passwordDisplay := strings.Repeat("●", len(m.passwordInput))
 		if passwordDisplay == "" {
-			passwordDisplay = lipgloss.NewStyle().Foreground(mutedColor).Render("(输入密码后按Enter确认)")
+			passwordDisplay = lipgloss.NewStyle().Foreground(mutedColor).Render(t.InputPasswordHint)
 		} else {
 			passwordDisplay = infoStyle.Render(passwordDisplay)
 		}
@@ -1304,56 +1312,57 @@ func (m model) viewInputPassword() string {
 
 // viewConfirm 渲染确认视图
 func (m model) viewConfirm() string {
+	t := i18n.T()
 	var sb strings.Builder
 
 	if m.mode == modeExtract {
-		sb.WriteString(titleStyle.Render("✅ 确认解压"))
+		sb.WriteString(titleStyle.Render(t.ConfirmExtract))
 	} else {
-		sb.WriteString(titleStyle.Render("✅ 确认压缩"))
+		sb.WriteString(titleStyle.Render(t.ConfirmCompress))
 	}
 	sb.WriteString("\n\n")
 
 	// 源文件
-	sb.WriteString(statLabelStyle.Render("源文件:"))
+	sb.WriteString(statLabelStyle.Render(t.SourceFile))
 	sb.WriteString(statValueStyle.Render(filepath.Base(m.selectedPath)))
 	sb.WriteString("\n")
 
 	// 输出
 	if m.mode == modeExtract {
-		sb.WriteString(statLabelStyle.Render("解压到:"))
+		sb.WriteString(statLabelStyle.Render(t.ExtractTo))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath) + "/"))
 		sb.WriteString("\n")
 
 		// 显示密码状态（解压模式）
 		format := archiver.DetectArchiveFormat(m.selectedPath)
 		if format == ".zip" || format == ".7z" {
-			sb.WriteString(statLabelStyle.Render("解压密码:"))
+			sb.WriteString(statLabelStyle.Render(t.ExtractPassword))
 			if m.password != "" {
-				sb.WriteString(infoStyle.Render("🔑 已设置"))
+				sb.WriteString(infoStyle.Render(t.PasswordSet))
 			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("🔓 无"))
+				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render(t.PasswordNone))
 			}
 			sb.WriteString("\n")
 		}
 	} else {
-		sb.WriteString(statLabelStyle.Render("输出文件:"))
+		sb.WriteString(statLabelStyle.Render(t.OutputFile))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath)))
 	}
 	sb.WriteString("\n")
 
 	if m.mode == modeCompress {
 		// 压缩格式
-		sb.WriteString(statLabelStyle.Render("压缩格式:"))
+		sb.WriteString(statLabelStyle.Render(t.CompressFormat))
 		sb.WriteString(infoStyle.Render(m.selectedFormat.Name))
 		sb.WriteString("\n")
 
 		// 密码保护
 		if m.selectedFormat.Extension == ".zip" {
-			sb.WriteString(statLabelStyle.Render("密码保护:"))
+			sb.WriteString(statLabelStyle.Render(t.PasswordProtect))
 			if m.usePassword {
-				sb.WriteString(successStyle.Render("🔒 AES-256 加密"))
+				sb.WriteString(successStyle.Render(t.AESEncrypted))
 			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render("🔓 无"))
+				sb.WriteString(lipgloss.NewStyle().Foreground(mutedColor).Render(t.PasswordNone))
 			}
 			sb.WriteString("\n")
 		}
@@ -1365,16 +1374,16 @@ func (m model) viewConfirm() string {
 				excludeCount += len(cat.Patterns)
 			}
 		}
-		sb.WriteString(statLabelStyle.Render("排除规则:"))
-		sb.WriteString(warningStyle.Render(fmt.Sprintf("%d 个模式", excludeCount)))
+		sb.WriteString(statLabelStyle.Render(t.ExcludeRules))
+		sb.WriteString(warningStyle.Render(fmt.Sprintf(t.PatternsCount, excludeCount)))
 		sb.WriteString("\n")
 	}
 
 	sb.WriteString("\n")
 	if m.mode == modeExtract {
-		sb.WriteString(successStyle.Render("按 Y/Enter 开始解压，N/Esc 返回修改"))
+		sb.WriteString(successStyle.Render(t.ConfirmStartExtract))
 	} else {
-		sb.WriteString(successStyle.Render("按 Y/Enter 开始压缩，N/Esc 返回修改"))
+		sb.WriteString(successStyle.Render(t.ConfirmStart))
 	}
 
 	return highlightBorderStyle.Render(sb.String())
@@ -1382,9 +1391,10 @@ func (m model) viewConfirm() string {
 
 // viewCompressing 渲染压缩中视图
 func (m model) viewCompressing() string {
+	t := i18n.T()
 	var sb strings.Builder
 
-	sb.WriteString(titleStyle.Render("🚀 正在压缩..."))
+	sb.WriteString(titleStyle.Render(t.Compressing))
 	sb.WriteString("\n\n")
 
 	// Spinner
@@ -1399,7 +1409,7 @@ func (m model) viewCompressing() string {
 		}
 		sb.WriteString(infoStyle.Render(currentFile))
 	} else {
-		sb.WriteString(subtitleStyle.Render("准备中..."))
+		sb.WriteString(subtitleStyle.Render(t.Preparing))
 	}
 	sb.WriteString("\n\n")
 
@@ -1416,34 +1426,34 @@ func (m model) viewCompressing() string {
 	if sparkline != "" {
 		speedColor := lipgloss.Color("#00D4FF")
 		sparkStyle := lipgloss.NewStyle().Foreground(speedColor)
-		sb.WriteString(statLabelStyle.Render("速度:"))
+		sb.WriteString(statLabelStyle.Render(t.Speed))
 		sb.WriteString(sparkStyle.Render(sparkline))
 		sb.WriteString("\n")
 		
 		// 当前速度和平均速度
-		sb.WriteString(statLabelStyle.Render("当前:"))
+		sb.WriteString(statLabelStyle.Render(t.Current))
 		sb.WriteString(infoStyle.Render(formatSpeed(m.currentSpeed)))
 		sb.WriteString("  ")
-		sb.WriteString(statLabelStyle.Render("平均:"))
+		sb.WriteString(statLabelStyle.Render(t.Average))
 		sb.WriteString(infoStyle.Render(formatSpeed(m.avgSpeed)))
 		sb.WriteString("\n")
 	}
 
 	// 统计信息
-	sb.WriteString(statLabelStyle.Render("处理进度:"))
-	sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d / %d 文件", m.compressStats.ProcessedFiles, m.compressStats.TotalFiles)))
+	sb.WriteString(statLabelStyle.Render(t.Progress))
+	sb.WriteString(statValueStyle.Render(fmt.Sprintf(t.FilesProgress, m.compressStats.ProcessedFiles, m.compressStats.TotalFiles)))
 	sb.WriteString("\n")
 
 	if m.compressStats.ExcludedFiles > 0 {
-		sb.WriteString(statLabelStyle.Render("已排除:"))
-		sb.WriteString(warningStyle.Render(fmt.Sprintf("%d 个文件/目录", m.compressStats.ExcludedFiles)))
+		sb.WriteString(statLabelStyle.Render(t.Excluded))
+		sb.WriteString(warningStyle.Render(fmt.Sprintf(t.FilesAndDirs, m.compressStats.ExcludedFiles)))
 		sb.WriteString("\n")
 	}
 
 	// 已用时间
 	if !m.startTime.IsZero() {
 		elapsed := time.Since(m.startTime)
-		sb.WriteString(statLabelStyle.Render("已用时间:"))
+		sb.WriteString(statLabelStyle.Render(t.ElapsedTime))
 		sb.WriteString(statValueStyle.Render(formatDuration(elapsed)))
 		sb.WriteString("\n")
 	}
@@ -1453,9 +1463,10 @@ func (m model) viewCompressing() string {
 
 // viewExtracting 渲染解压中视图
 func (m model) viewExtracting() string {
+	t := i18n.T()
 	var sb strings.Builder
 
-	sb.WriteString(titleStyle.Render("📂 正在解压..."))
+	sb.WriteString(titleStyle.Render(t.Extracting))
 	sb.WriteString("\n\n")
 
 	// Spinner
@@ -1470,7 +1481,7 @@ func (m model) viewExtracting() string {
 		}
 		sb.WriteString(infoStyle.Render(currentFile))
 	} else {
-		sb.WriteString(subtitleStyle.Render("准备中..."))
+		sb.WriteString(subtitleStyle.Render(t.Preparing))
 	}
 	sb.WriteString("\n\n")
 
@@ -1487,32 +1498,32 @@ func (m model) viewExtracting() string {
 	if sparkline != "" {
 		speedColor := lipgloss.Color("#00D4FF")
 		sparkStyle := lipgloss.NewStyle().Foreground(speedColor)
-		sb.WriteString(statLabelStyle.Render("速度:"))
+		sb.WriteString(statLabelStyle.Render(t.Speed))
 		sb.WriteString(sparkStyle.Render(sparkline))
 		sb.WriteString("\n")
 		
 		// 当前速度和平均速度
-		sb.WriteString(statLabelStyle.Render("当前:"))
+		sb.WriteString(statLabelStyle.Render(t.Current))
 		sb.WriteString(infoStyle.Render(formatSpeed(m.currentSpeed)))
 		sb.WriteString("  ")
-		sb.WriteString(statLabelStyle.Render("平均:"))
+		sb.WriteString(statLabelStyle.Render(t.Average))
 		sb.WriteString(infoStyle.Render(formatSpeed(m.avgSpeed)))
 		sb.WriteString("\n")
 	}
 
 	// 统计信息
-	sb.WriteString(statLabelStyle.Render("处理进度:"))
+	sb.WriteString(statLabelStyle.Render(t.Progress))
 	if m.extractStats.TotalFiles > 0 {
-		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d / %d 文件", m.extractStats.ProcessedFiles, m.extractStats.TotalFiles)))
+		sb.WriteString(statValueStyle.Render(fmt.Sprintf(t.FilesProgress, m.extractStats.ProcessedFiles, m.extractStats.TotalFiles)))
 	} else {
-		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d 文件", m.extractStats.ProcessedFiles)))
+		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d", m.extractStats.ProcessedFiles)))
 	}
 	sb.WriteString("\n")
 
 	// 已用时间
 	if !m.startTime.IsZero() {
 		elapsed := time.Since(m.startTime)
-		sb.WriteString(statLabelStyle.Render("已用时间:"))
+		sb.WriteString(statLabelStyle.Render(t.ElapsedTime))
 		sb.WriteString(statValueStyle.Render(formatDuration(elapsed)))
 		sb.WriteString("\n")
 	}
@@ -1522,59 +1533,60 @@ func (m model) viewExtracting() string {
 
 // viewDone 渲染完成视图
 func (m model) viewDone() string {
+	t := i18n.T()
 	var sb strings.Builder
 
 	if m.mode == modeExtract {
-		sb.WriteString(successStyle.Render("🎉 解压完成！"))
+		sb.WriteString(successStyle.Render(t.ExtractDone))
 		sb.WriteString("\n\n")
 
 		// 输出目录
-		sb.WriteString(statLabelStyle.Render("解压到:"))
+		sb.WriteString(statLabelStyle.Render(t.ExtractToLabel))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath) + "/"))
 		sb.WriteString("\n")
 
 		// 解压文件数
-		sb.WriteString(statLabelStyle.Render("解压文件:"))
-		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d 个", m.extractStats.TotalFiles)))
+		sb.WriteString(statLabelStyle.Render(t.ExtractedFiles))
+		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d", m.extractStats.TotalFiles)))
 		sb.WriteString("\n")
 
 		// 解压大小
-		sb.WriteString(statLabelStyle.Render("解压大小:"))
+		sb.WriteString(statLabelStyle.Render(t.ExtractedSize))
 		sb.WriteString(successStyle.Render(formatFileSize(m.extractStats.ExtractedSize)))
 		sb.WriteString("\n")
 	} else {
-		sb.WriteString(successStyle.Render("🎉 压缩完成！"))
+		sb.WriteString(successStyle.Render(t.CompressDone))
 		sb.WriteString("\n\n")
 
 		// 输出文件
-		sb.WriteString(statLabelStyle.Render("输出文件:"))
+		sb.WriteString(statLabelStyle.Render(t.OutputFileLabel))
 		sb.WriteString(statValueStyle.Render(filepath.Base(m.outputPath)))
 		sb.WriteString("\n")
 
 		// 压缩文件数
-		sb.WriteString(statLabelStyle.Render("压缩文件:"))
-		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d 个", m.compressStats.TotalFiles)))
+		sb.WriteString(statLabelStyle.Render(t.CompressedFiles))
+		sb.WriteString(statValueStyle.Render(fmt.Sprintf("%d", m.compressStats.TotalFiles)))
 		sb.WriteString("\n")
 
 		// 原始大小
-		sb.WriteString(statLabelStyle.Render("原始大小:"))
+		sb.WriteString(statLabelStyle.Render(t.OriginalSize))
 		sb.WriteString(infoStyle.Render(formatFileSize(m.compressStats.TotalSize)))
 		sb.WriteString("\n")
 
 		// 压缩后大小
-		sb.WriteString(statLabelStyle.Render("压缩后大小:"))
+		sb.WriteString(statLabelStyle.Render(t.CompressedSize))
 		sb.WriteString(successStyle.Render(formatFileSize(m.compressStats.CompressedSize)))
 		sb.WriteString("\n")
 
 		// 压缩率
-		sb.WriteString(statLabelStyle.Render("压缩率:"))
+		sb.WriteString(statLabelStyle.Render(t.CompressionRate))
 		sb.WriteString(successStyle.Render(fmt.Sprintf("%.1f%%", m.compressStats.CompressionRate)))
 		sb.WriteString("\n")
 
 		// 排除文件数
 		if m.compressStats.ExcludedFiles > 0 {
-			sb.WriteString(statLabelStyle.Render("排除文件:"))
-			sb.WriteString(warningStyle.Render(fmt.Sprintf("%d 个", m.compressStats.ExcludedFiles)))
+			sb.WriteString(statLabelStyle.Render(t.ExcludedFiles))
+			sb.WriteString(warningStyle.Render(fmt.Sprintf("%d", m.compressStats.ExcludedFiles)))
 			sb.WriteString("\n")
 		}
 	}
@@ -1584,16 +1596,17 @@ func (m model) viewDone() string {
 
 // viewError 渲染错误视图
 func (m model) viewError() string {
+	t := i18n.T()
 	var sb strings.Builder
 
 	if m.mode == modeExtract {
-		sb.WriteString(errorStyle.Render("❌ 解压失败"))
+		sb.WriteString(errorStyle.Render(t.ExtractFailed))
 	} else {
-		sb.WriteString(errorStyle.Render("❌ 压缩失败"))
+		sb.WriteString(errorStyle.Render(t.CompressFailed))
 	}
 	sb.WriteString("\n\n")
 
-	sb.WriteString(statLabelStyle.Render("错误信息:"))
+	sb.WriteString(statLabelStyle.Render(t.ErrorMessage))
 	sb.WriteString("\n")
 	sb.WriteString(errorStyle.Render(m.errorMsg))
 
@@ -1621,9 +1634,12 @@ func formatFileSize(size int64) string {
 }
 
 func main() {
+	// 初始化国际化，根据系统语言自动选择
+	i18n.Init()
+
 	p := tea.NewProgram(newModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("启动失败: %v\n", err)
+		fmt.Printf("Failed to start: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -30,6 +30,7 @@
 - 📈 **速度统计图** - 实时显示速度曲线、当前/平均速度、已用时间
 - 📈 **压缩统计** - 显示压缩率、文件数量、大小等信息
 - ⌨️ **Vim 风格快捷键** - `j/k` 导航，`h/l` 进入/返回
+- 🌍 **多语言支持** - 自动检测系统语言（中文/英文）
 
 ## 🚀 安装
 
@@ -43,16 +44,26 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Lynricsy/SimpleArchiver/main
 
 > 💡 该脚本会自动检测系统架构，优先下载预编译版本，如无可用版本则使用 Go 环境编译运行。
 
-如果你有 Go 环境，也可以直接运行：
+### 📦 通过 npm 安装
 
 ```bash
-go run github.com/Lynricsy/SimpleArchiver@latest
+# 全局安装
+npm install -g simple-archiver
+
+# 或使用 npx 直接运行
+npx simple-archiver
 ```
 
 ### 使用 Go Install
 
 ```bash
 go install github.com/Lynricsy/SimpleArchiver@latest
+```
+
+如果你有 Go 环境，也可以直接运行：
+
+```bash
+go run github.com/Lynricsy/SimpleArchiver@latest
 ```
 
 ### 从源码编译
