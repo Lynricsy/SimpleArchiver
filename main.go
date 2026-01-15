@@ -35,43 +35,43 @@ const (
 	modeExtract
 )
 
-// Nerd Font 图标定义
+// Nerd Font 图标定义 (使用 Unicode 转义序列确保正确编码)
 const (
 	// 文件类型图标
-	iconArchive     = ""  // nf-fa-file_archive_o
-	iconFolder      = ""  // nf-fa-folder
-	iconFolderOpen  = ""  // nf-fa-folder_open
-	iconFile        = ""  // nf-fa-file_o
-	iconLocation    = ""  // nf-oct-location
+	iconArchive     = "\uf1c6" // nf-fa-file_archive_o
+	iconFolder      = "\uf07b" // nf-fa-folder
+	iconFolderOpen  = "\uf07c" // nf-fa-folder_open
+	iconFile        = "\uf016" // nf-fa-file_o
+	iconLocation    = "\uf450" // nf-oct-location
 	
 	// 操作图标
-	iconCompress    = ""  // nf-oct-package
-	iconExtract     = ""  // nf-fa-folder_open
-	iconRocket      = ""  // nf-fa-rocket
-	iconCheck       = ""  // nf-fa-check
-	iconCheckbox    = ""  // nf-fa-check_square_o
-	iconCheckboxOff = ""  // nf-fa-square_o
-	iconLock        = ""  // nf-fa-lock
-	iconUnlock      = ""  // nf-fa-unlock
-	iconKey         = ""  // nf-fa-key
+	iconCompress    = "\uf487" // nf-oct-package
+	iconExtract     = "\uf07c" // nf-fa-folder_open
+	iconRocket      = "\uf135" // nf-fa-rocket
+	iconCheck       = "\uf00c" // nf-fa-check
+	iconCheckbox    = "\uf046" // nf-fa-check_square_o
+	iconCheckboxOff = "\uf096" // nf-fa-square_o
+	iconLock        = "\uf023" // nf-fa-lock
+	iconUnlock      = "\uf09c" // nf-fa-unlock
+	iconKey         = "\uf084" // nf-fa-key
 	
 	// 状态图标
-	iconSuccess     = ""  // nf-fa-check_circle
-	iconError       = ""  // nf-fa-times_circle
-	iconWarning     = ""  // nf-fa-exclamation_triangle
-	iconInfo        = ""  // nf-fa-info_circle
-	iconSpinner     = ""  // nf-fa-spinner
+	iconSuccess     = "\uf058" // nf-fa-check_circle
+	iconError       = "\uf057" // nf-fa-times_circle
+	iconWarning     = "\uf071" // nf-fa-exclamation_triangle
+	iconInfo        = "\uf05a" // nf-fa-info_circle
+	iconSpinner     = "\uf110" // nf-fa-spinner
 	
 	// 导航图标
-	iconArrowRight  = ""  // nf-cod-chevron_right
-	iconArrowDown   = ""  // nf-cod-chevron_down
-	iconPointer     = ""  // nf-fa-caret_right
+	iconArrowRight  = "\ueab6" // nf-cod-chevron_right
+	iconArrowDown   = "\ueab4" // nf-cod-chevron_down
+	iconPointer     = "\uf0da" // nf-fa-caret_right
 	
 	// Powerline 箭头
-	plArrowRight    = ""  // Powerline right arrow
-	plArrowLeft     = ""  // Powerline left arrow
-	plArrowThinR    = ""  // Powerline thin right arrow
-	plArrowThinL    = ""  // Powerline thin left arrow
+	plArrowRight    = "\ue0b0" // Powerline right arrow
+	plArrowLeft     = "\ue0b2" // Powerline left arrow
+	plArrowThinR    = "\ue0b1" // Powerline thin right arrow
+	plArrowThinL    = "\ue0b3" // Powerline thin left arrow
 )
 
 // 颜色定义
