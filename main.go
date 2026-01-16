@@ -24,7 +24,7 @@ import (
 // 版本信息
 const (
 	AppName    = "SimpleArchiver"
-	AppVersion = "1.7.0"
+	AppVersion = "1.7.1"
 )
 
 // 操作模式
