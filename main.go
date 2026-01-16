@@ -144,7 +144,7 @@ var (
 
 	statLabelStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).
-			Width(16)
+			Width(20)
 
 	statValueStyle = lipgloss.NewStyle().
 			Foreground(foregroundColor).
@@ -828,23 +828,10 @@ func (m *model) startCompress() tea.Cmd {
 			Excludes: excludes,
 			Password: m.password,
 			OnProgress: func(current, total int, currentFile string) {
-				// 发送进度到通道（非阻塞）
-				select {
-				case progressChan <- compressProgressMsg{
-					current:     current,
-					total:       total,
-					currentFile: currentFile,
-					stats: archiver.CompressStats{
-						TotalFiles:     total,
-						ProcessedFiles: current,
-						CurrentFile:    currentFile,
-					},
-				}:
-				default:
-				}
+				// OnProgress 只用于简单进度更新，完整统计由 OnStats 处理
 			},
 			OnStats: func(stats archiver.CompressStats) {
-				// 发送统计信息到通道（非阻塞）
+				// 发送完整统计信息到通道（非阻塞）
 				select {
 				case progressChan <- compressProgressMsg{
 					current:     stats.ProcessedFiles,
@@ -891,23 +878,10 @@ func (m *model) startExtract() tea.Cmd {
 			Output:   m.outputPath,
 			Password: m.password,
 			OnProgress: func(current, total int, currentFile string) {
-				// 发送进度到通道（非阻塞）
-				select {
-				case progressChan <- extractProgressMsg{
-					current:     current,
-					total:       total,
-					currentFile: currentFile,
-					stats: archiver.ExtractStats{
-						TotalFiles:     total,
-						ProcessedFiles: current,
-						CurrentFile:    currentFile,
-					},
-				}:
-				default:
-				}
+				// OnProgress 只用于简单进度更新，完整统计由 OnStats 处理
 			},
 			OnStats: func(stats archiver.ExtractStats) {
-				// 发送统计信息到通道（非阻塞）
+				// 发送完整统计信息到通道（非阻塞）
 				select {
 				case progressChan <- extractProgressMsg{
 					current:     stats.ProcessedFiles,
@@ -945,8 +919,13 @@ func (m *model) updateSpeed() {
 
 	var currentBytes int64
 	if m.state == stateCompressing {
-		currentBytes = m.compressStats.CompressedSize
+		// 压缩时：根据已处理文件数估算已处理字节数
+		if m.compressStats.TotalFiles > 0 && m.compressStats.TotalSize > 0 {
+			progress := float64(m.compressStats.ProcessedFiles) / float64(m.compressStats.TotalFiles)
+			currentBytes = int64(progress * float64(m.compressStats.TotalSize))
+		}
 	} else {
+		// 解压时：使用实际解压的字节数
 		currentBytes = m.extractStats.ExtractedSize
 	}
 
@@ -964,7 +943,7 @@ func (m *model) updateSpeed() {
 
 	// 计算平均速度
 	totalElapsed := now.Sub(m.startTime).Seconds()
-	if totalElapsed > 0 {
+	if totalElapsed > 0 && currentBytes > 0 {
 		m.avgSpeed = float64(currentBytes) / totalElapsed
 	}
 
